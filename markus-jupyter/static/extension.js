@@ -104,7 +104,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
           course_id +
           "/assignments/" +
           assessment_id +
-          "/upload_files"
+          "/submit_file"
       );
     } catch {
       throw (
@@ -132,7 +132,9 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     const filename = Jupyter.notebook.notebook_name;
     const content = JSON.stringify(Jupyter.notebook.toJSON());
     const formData = new FormData();
-    formData.append("upload", new Blob([content]), filename);
+    formData.append("filename", filename);
+    formData.append("file_content", new Blob([content]));
+    formData.append("mime_type", "application/x-ipynb+json");
 
     console.info(
       `markus-jupyter-extension: Submitting file ${filename} to ${submitUrl}`
@@ -141,6 +143,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
       method: "POST",
       headers: {
         AUTHORIZATION: "MarkUsAuth " + key,
+        Accept: "application/json",
       },
       body: formData,
     }).then(handleMarkUsResponse, (err) => handleNetworkError(submitUrl, err));
@@ -153,10 +156,12 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
    */
   function handleMarkUsResponse(response) {
     if (!response.ok) {
-      report_error(
-        "Received the following error from the MarkUs server: " +
-          response.statusText
-      );
+      response.json().then((body) => {
+        report_error(
+          "Received the following error from the MarkUs server: " +
+            body.description
+        );
+      });
       return;
     }
 
