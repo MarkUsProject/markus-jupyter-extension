@@ -1,6 +1,6 @@
 # markus-jupyter-extension
 
-A Jupyter extension to support integration with MarkUs.
+A Jupyter extension to support integration with [MarkUs](https://github.com/MarkUsProject/Wiki).
 
 ## Installation
 
@@ -8,7 +8,14 @@ This extension is available as a Python package.
 To install it:
 
 ```console
-$ pip install git+https://github.com/MarkUsProject/markus-jupyter-extension.git
+$ pip install markus-jupyter-extension
+```
+
+Then install and enable the extension:
+
+```console
+$ jupyter nbextension install --py --user markus-jupyter-extension
+$ jupyter nbextension enable --py --user markus-jupyter-extension
 ```
 
 ## Development
@@ -25,11 +32,10 @@ Then go into the cloned repository and install the contained Python package in e
 $ pip install -e .
 ```
 
-Then install and enable the extension:
+You'll also need to install Jupyter notebook:
 
 ```console
-$ jupyter nbextension install --py --user --symlink markus-jupyter
-$ jupyter nbextension enable --py --user markus-jupyter
+$ pip install notebook
 ```
 
 ### Check setup using `examples`
