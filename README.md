@@ -18,6 +18,10 @@ $ jupyter nbextension install --py --user markus-jupyter-extension
 $ jupyter nbextension enable --py --user markus-jupyter-extension
 ```
 
+Ensure that the MarkUs instances that this extension will integrate with have included the host name of the server that is running your Jupyter instance.
+
+For example, if you are installing this extension to a Jupyter instance running at www.my_jupyter.com, then make sure that 'my_jupyter.com' is included in the [`jupyter_server.hosts` settings](https://github.com/MarkUsProject/Wiki/blob/release/Configuration.md#markus-settings) on MarkUs.
+
 ## Development
 
 To begin development on the extension, first clone this repository:
