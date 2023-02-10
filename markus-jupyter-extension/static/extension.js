@@ -56,19 +56,54 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     // Get API key from file
     const api_key_path = markus_metadata.api_key_path || DEFAULT_API_KEY_PATH;
 
-    fetch(`files/${api_key_path}?download=1`)
+    fetchApiKey(api_key_path).then(
+      (apiKey) => submitFile(submitUrl, apiKey),
+      report_error
+    );
+  }
+
+  /**
+   * Returns a promise that resolves to the user's MarkUs API key.
+   * First checks the current directory, and then (if not found) checks
+   * the Jupyter home directory.
+   *
+   * @param {string} api_key_path
+   * @returns {Promise}
+   */
+  function fetchApiKey(api_key_path) {
+    return fetch(`files/${api_key_path}?download=1`)
       .then((response) => {
         if (response.ok) {
           return response.text();
         } else if (response.status === 404) {
-          throw Error(`Could not find MarkUs API key file ${api_key_path}.`);
+          throw Error(
+            `Could not find MarkUs API key file ${api_key_path} in current directory.`
+          );
         } else {
           throw Error(
-            `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path}.`
+            `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} in current directory.`
           );
         }
       })
-      .then((apiKey) => submitFile(submitUrl, apiKey), report_error);
+      .catch((e) => {
+        console.info(`markus-jupyter-extension: ${e.message}`);
+        console.info(
+          `markus-jupyter-extension: Searching for MarkUs API key in home directory.`
+        );
+        return fetch(`/files/${api_key_path}?download=1`).then((response) => {
+          if (response.ok) {
+            return response.text();
+          } else if (response.status === 404) {
+            throw Error(
+              `Could not find MarkUs API key file ${api_key_path} in home directory.`
+            );
+          } else {
+            throw Error(
+              `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} from home directory.`
+            );
+          }
+        });
+      });
   }
 
   /**
