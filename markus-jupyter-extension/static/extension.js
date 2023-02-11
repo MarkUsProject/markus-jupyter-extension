@@ -33,7 +33,6 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     logo.width = "16";
     new_group.firstChild.prepend(logo);
   }
-
   /**
    * Submit the currently open file to MarkUs. Relies on the following notebook metadata:
    * "markus": {
@@ -44,22 +43,28 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
    */
   function submitToMarkus() {
     // Construct URL from MarkUs metadata
-    const markus_metadata = Jupyter.notebook.metadata.markus;
-    let submitUrl;
+    const metadata = Jupyter.notebook.metadata;
     try {
-      submitUrl = getSubmitUrl(markus_metadata);
+      validateMetadata(metadata);
     } catch (e) {
       report_error(e);
       return;
     }
 
-    // Get API key from file
-    const api_key_path = markus_metadata.api_key_path || DEFAULT_API_KEY_PATH;
+    const markusMetadata = metadata.markus;
+    const submitUrl = getSubmitUrl(markusMetadata);
 
-    fetchApiKey(api_key_path).then(
-      (apiKey) => submitFile(submitUrl, apiKey),
-      report_error
-    );
+    // Get API key from file
+    const api_key_path = markusMetadata.api_key_path || DEFAULT_API_KEY_PATH;
+
+    fetchApiKey(api_key_path)
+      .then((apiKey) => {
+        return submitFile(submitUrl, apiKey);
+      }, report_error)
+      .then(
+        (response) => handleMarkUsResponse(response, markusMetadata),
+        (err) => handleNetworkError(submitUrl, err)
+      );
   }
 
   /**
@@ -108,17 +113,51 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
 
   /**
    * Constructs the MarkUs URL to submit the notebook file to.
-   * Raises an error if URL cannot be constructed from the metadata.
+   * This assumes the metadata has already been validated.
    *
    * @param {object} markusMetadata
    * @returns {URL} the URL to submit to
    */
   function getSubmitUrl(markusMetadata) {
-    if (markusMetadata === undefined) {
+    let { url, course_id, assessment_id } = markusMetadata;
+    return new URL(
+      url +
+        "/api/courses/" +
+        course_id +
+        "/assignments/" +
+        assessment_id +
+        "/submit_file"
+    );
+  }
+
+  /**
+   * Constructs the MarkUs URL to view an assessment (as a student).
+   * This assumes the metadata has already been validated.
+   *
+   * @param {object} markusMetadata
+   * @returns {URL} the assessment URL
+   */
+  function getAssessmentUrl(markusMetadata) {
+    let { url, course_id, assessment_id } = markusMetadata;
+    return new URL(
+      url + "/courses/" + course_id + "/assignments/" + assessment_id
+    );
+  }
+
+  /**
+   * Validate whether the given notebook metadata has a valid MarkUs configuration.
+   * A successful return means the notebook metadata has a valid configuration.
+   * An error is raised if the configuration is invalid.
+   *
+   * @param {object} metadata
+   * @returns {null}
+   */
+  function validateMetadata(metadata) {
+    if (metadata["markus"] === undefined) {
       throw 'Notebook metadata is missing the "markus" key.';
     }
 
-    let { url, course_id, assessment_id } = markusMetadata;
+    let { url, course_id, assessment_id } = metadata["markus"];
 
     if (!url || !course_id || !assessment_id) {
       throw 'Notebook metadata is missing one or more of the following keys under "markus": "url", "course_id", or "assessment_id".';
@@ -131,28 +170,11 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
       throw 'Notebook metadata "course_id" and "assessment_id" values must be numbers.';
     }
 
-    let submitUrl;
     try {
-      submitUrl = new URL(
-        url +
-          "/api/courses/" +
-          course_id +
-          "/assignments/" +
-          assessment_id +
-          "/submit_file"
-      );
+      new URL(url);
     } catch {
-      throw (
-        "Notebook metatdata did not specify a valid MarkUs URL. Parameters: " +
-        JSON.stringify({
-          url: url,
-          course_id: course_id,
-          assessment_id: assessment_id,
-        })
-      );
+      throw 'Notebook metatdata "url" value did not specify a valid URL.';
     }
-
-    return submitUrl;
   }
 
   /**
@@ -174,22 +196,24 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     console.info(
       `markus-jupyter-extension: Submitting file ${filename} to ${submitUrl}`
     );
-    fetch(submitUrl, {
+
+    return fetch(submitUrl, {
       method: "POST",
       headers: {
         AUTHORIZATION: "MarkUsAuth " + key,
         Accept: "application/json",
       },
       body: formData,
-    }).then(handleMarkUsResponse, (err) => handleNetworkError(submitUrl, err));
+    });
   }
 
   /**
    * Handle MarkUs response after submitting file.
    * @param {*} response
+   * @param {object} MarkUs metadata
    * @returns
    */
-  function handleMarkUsResponse(response) {
+  function handleMarkUsResponse(response, metadata) {
     if (!response.ok) {
       response.json().then((body) => {
         report_error(
@@ -200,10 +224,27 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
       return;
     }
 
+    const assessmentUrl = getAssessmentUrl(metadata);
+    const assessmentLink = document.createElement("a");
+    assessmentLink.setAttribute("href", assessmentUrl);
+    assessmentLink.setAttribute("target", "_blank");
+    assessmentLink.setAttribute("rel", "noopener noreferrer");
+    assessmentLink.innerText = assessmentUrl;
+    const body = document.createElement("p");
+    body.appendChild(
+      document.createTextNode("Your file has been submitted! Go to ")
+    );
+    body.appendChild(assessmentLink);
+    body.appendChild(
+      document.createTextNode(
+        " to view your submission. Please check your assessment due date carefully, as only files submitted before the due date will be graded."
+      )
+    );
+
     // Success dialog
     dialog.modal({
-      title: "Submit to MarkUs",
-      body: "Your file was submitted!",
+      title: SUBMIT_LABEL,
+      body: body,
       default_button: "Close",
       buttons: {
         Close: {},
@@ -233,7 +274,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
   function report_error(msg) {
     console.error(msg);
     dialog.modal({
-      title: "Submit to MarkUs",
+      title: SUBMIT_LABEL,
       body: "[ERROR] Could not submit file to MarkUs. Cause: " + msg,
       default_button: "Close",
       buttons: {
