@@ -33,6 +33,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     logo.width = "16";
     new_group.firstChild.prepend(logo);
   }
+
   /**
    * Submit the currently open file to MarkUs. Relies on the following notebook metadata:
    * "markus": {
@@ -154,26 +155,26 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
    */
   function validateMetadata(metadata) {
     if (metadata["markus"] === undefined) {
-      throw 'Notebook metadata is missing the "markus" key.';
+      throw 'Notebook metadata is missing the "markus" key. Please check the metadata under Edit -> Edit Notebook Metadata.';
     }
 
     let { url, course_id, assessment_id } = metadata["markus"];
 
     if (!url || !course_id || !assessment_id) {
-      throw 'Notebook metadata is missing one or more of the following keys under "markus": "url", "course_id", or "assessment_id".';
+      throw 'Notebook metadata is missing one or more of the following keys under "markus": "url", "course_id", or "assessment_id". Please check the metadata under Edit -> Edit Notebook Metadata.';
     }
 
     course_id = parseInt(course_id);
     assessment_id = parseInt(assessment_id);
 
     if (isNaN(course_id) || isNaN(assessment_id)) {
-      throw 'Notebook metadata "course_id" and "assessment_id" values must be numbers.';
+      throw 'Notebook metadata "course_id" and "assessment_id" values must be numbers. Please check the metadata under Edit -> Edit Notebook Metadata.';
     }
 
     try {
       new URL(url);
     } catch {
-      throw 'Notebook metatdata "url" value did not specify a valid URL.';
+      throw 'Notebook metatdata "url" value did not specify a valid URL. Please check the metadata under Edit -> Edit Notebook Metadata.';
     }
   }
 
