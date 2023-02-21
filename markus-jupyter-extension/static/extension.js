@@ -96,19 +96,22 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
         console.info(
           `markus-jupyter-extension: Searching for MarkUs API key in home directory.`
         );
-        return fetch(`/files/${api_key_path}?download=1`).then((response) => {
-          if (response.ok) {
-            return response.text();
-          } else if (response.status === 404) {
-            throw Error(
-              `Could not find MarkUs API key file ${api_key_path} in home directory.`
-            );
-          } else {
-            throw Error(
-              `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} from home directory.`
-            );
+        const base_url = Jupyter.notebook.base_url;
+        return fetch(`${base_url}files/${api_key_path}?download=1`).then(
+          (response) => {
+            if (response.ok) {
+              return response.text();
+            } else if (response.status === 404) {
+              throw Error(
+                `Could not find MarkUs API key file ${api_key_path} in home directory.`
+              );
+            } else {
+              throw Error(
+                `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} from home directory.`
+              );
+            }
           }
-        });
+        );
       });
   }
 
