@@ -1,3 +1,50 @@
+[project]
+name = "markus-jupyter-extension"
+version = "0.1.4"
+description = "Jupyter extension for integration with MarkUs"
+readme = "README.md"
+maintainers = [
+    { name = "David Liu", email="david@cs.toronto.edu" }
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "notebook~=6.4",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/MarkUsProject/markus-jupyter-extension"
+"Bug Tracker" = "https://github.com/MarkUsProject/markus-jupyter-extension/issues"
+
+[project.optional-dependencies]
+jupyterlab = [
+    "jupyterlab>=4.5.1",
+]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+  "pre-commit",
+]
+
+
+[tool.setuptools.data-files]
+"share/jupyter/nbextensions/markus-jupyter-extension" = [
+    "markus-jupyter-extension/static/extension.js",
+]
+
+"share/jupyter/nbextensions/markus-jupyter-extension/assets" = [
+    "markus-jupyter-extension/static/assets/markus.ico",
+]
+
+"etc/jupyter/nbconfig/notebook.d" = [
+    "jupyter-config/nbconfig/notebook.d/markus_jupyter_extension.json",
+]
