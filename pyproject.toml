@@ -6,7 +6,7 @@ readme = "README.md"
 maintainers = [
     { name = "David Liu", email="david@cs.toronto.edu" }
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -38,11 +38,11 @@ dev = [
 
 [tool.setuptools.data-files]
 "share/jupyter/nbextensions/markus-jupyter-extension" = [
-    "markus-jupyter-extension/static/extension.js",
+    "markus_jupyter_extension/static/extension.js",
 ]
 
 "share/jupyter/nbextensions/markus-jupyter-extension/assets" = [
-    "markus-jupyter-extension/static/assets/markus.ico",
+    "markus_jupyter_extension/static/assets/markus.ico",
 ]
 
 "etc/jupyter/nbconfig/notebook.d" = [
