@@ -118,14 +118,31 @@ function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
 // Compiling the submission payload
 function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata): ISubmitPayload {
   const notebookPath = panel.context.path;
+
+  if (!notebookPath) {
+    throw new Error('Could not determine notebook path.');
+  }
+
   const notebookName =
     panel.context.contentsModel?.name ||
-    notebookPath.split('/').pop() ||
-    'notebook.ipynb';
+    notebookPath.split('/').pop();
+
+  if (!notebookName) {
+    throw new Error(
+      'Could not determine notebook name from context. Please ensure the notebook is saved.'
+    );
+  }
 
   const jupyterBaseUrl = PageConfig.getBaseUrl();
   const jupyterOrigin = window.location.origin;
-  const jupyterToken = PageConfig.getToken() || '';
+
+  const jupyterToken = PageConfig.getToken();
+
+  if (!jupyterToken) {
+    throw new Error(
+      'No Jupyter token available. This environment may be using cookie/OAuth authentication. Token-based pull may not work.'
+    );
+  }
 
   return {
     notebook_path: notebookPath,
