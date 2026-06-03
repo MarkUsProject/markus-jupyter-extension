@@ -1,166 +1,326 @@
-// Import Jupyter Front End components
+// JupyterLab frontend imports
 import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
-// Import Command components
 import {
   ICommandPalette,
   showDialog,
-  Dialog
+  Dialog,
+  ToolbarButton
 } from '@jupyterlab/apputils';
 
-// Getting JupyterLab coreutils
 import { PageConfig } from '@jupyterlab/coreutils';
 
-// Getting notebook components
 import {
   INotebookTracker,
   NotebookPanel
 } from '@jupyterlab/notebook';
 
-// Import to get toolbar button
-import { ToolbarButton } from '@jupyterlab/apputils';
-
-// Declaring necessary variables
 const ACTION_PREFIX = 'markus';
-const ACTION_NAME = 'markus_submit';
+const ACTION_NAME = 'submit';
 const COMMAND_ID = `${ACTION_PREFIX}:${ACTION_NAME}`;
 const SUBMIT_LABEL = 'Submit to MarkUs';
+const TOOLBAR_ITEM_NAME = 'markus-submit-button';
 
-// Creating the Metadata space
-interface IMarkUsMetadata {
+// Normalize MarkUs metadata
+interface INormalizedMarkUsMetadata {
   url: string;
-  course_id: number | string;
-  assessment_id: number | string;
-  destination_path?: string;
+  course?: string;
+  assignment?: string;
+  course_id?: number;
+  assessment_id?: number;
+  submit_endpoint: string;
 }
 
-// Creating the Payload space
+// Getting Jupyter information
+interface IJupyterInfo {
+  base_url: string;
+  origin: string;
+  full_url: string;
+  token: string;
+}
+
+// Creating the payload
 interface ISubmitPayload {
+  course?: string;
+  assignment?: string;
+  course_id?: number;
+  assessment_id?: number;
   notebook_path: string;
   notebook_name: string;
-  jupyter_base_url: string;
-  jupyter_origin: string;
-  jupyter_token: string;
-  markus: IMarkUsMetadata;
+  destination_path: string;
+  jupyter: IJupyterInfo;
 }
 
-// Creating the submission response space
+// Submission response
 interface ISubmitResponse {
-  status: string;
+  status?: string;
   message?: string;
+  submitted_file?: string;
   saved_file?: string;
+  commit_revision?: string;
   assessment_url?: string;
+  repository_path?: string;
 }
 
-// Checking to see if a notebook is open
+// Creating metadata object
+function metadataValueToObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+// Get the open notebook data
 function getCurrentNotebookPanel(tracker: INotebookTracker): NotebookPanel {
   const panel = tracker.currentWidget;
 
   if (!panel) {
-    throw new Error('No active notebook is open.');
+    throw new Error('No active notebook is open. Please open the notebook you want to submit.');
+  }
+
+  if (!panel.context.path) {
+    throw new Error('The current notebook does not have a valid file path. Please save it first.');
   }
 
   return panel;
 }
 
-// Extracting the MarkUs metadata from the notebook
-function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
-  const metadata = panel.content.model?.metadata as any;
-  const rawMetadata = metadata?.get ? metadata.get('markus') : metadata?.markus;
+// Grabbing the notebook metadata
+function getRawNotebookMetadata(panel: NotebookPanel, key: string): unknown {
+  const model = panel.content.model;
 
-  // Checking if MarkUs Metadata is in the notebook metadata
-  if (!rawMetadata || typeof rawMetadata !== 'object') {
+  if (!model) {
+    return undefined;
+  }
+
+  const sharedModel = model.sharedModel as unknown;
+
+  if (
+    sharedModel &&
+    typeof (sharedModel as { getMetadata?: unknown }).getMetadata === 'function'
+  ) {
+    return (sharedModel as { getMetadata: (metadataKey: string) => unknown }).getMetadata(key);
+  }
+
+  const metadata = model.metadata as unknown;
+
+  if (!metadata) {
+    return undefined;
+  }
+
+  if (typeof (metadata as { get?: unknown }).get === 'function') {
+    return (metadata as { get: (metadataKey: string) => unknown }).get(key);
+  }
+
+  return (metadata as Record<string, unknown>)[key];
+}
+
+function parseOptionalNumber(value: unknown, fieldName: string): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Notebook metadata value "${fieldName}" must be a number when provided.`);
+  }
+
+  return parsed;
+}
+
+function parseOptionalString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error(`Notebook metadata value "${fieldName}" must be a string when provided.`);
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+// Creating MarkUs URL
+function normalizeMarkUsUrl(value: unknown): string {
+  if (!value || typeof value !== 'string') {
     throw new Error(
-      'Notebook metadata is missing the "markus" key. Please add top-level notebook metadata named "markus".'
+      'Notebook metadata is missing required MarkUs key "url". Example: "http://localhost:3000/csc108".'
     );
   }
 
-  
-  const markusMetadata = rawMetadata as IMarkUsMetadata;
-  const { url, course_id, assessment_id } = markusMetadata;
+  const url = value.trim().replace(/\/+$/, '');
 
-  // Checking if all three components of MarkUs metadata is present
-  if (!url || !course_id || !assessment_id) {
-    throw new Error(
-      'Notebook metadata is missing one or more required MarkUs keys: "url", "course_id", or "assessment_id".'
-    );
-  }
-
-  const courseIdNumber = Number(course_id);
-  const assessmentIdNumber = Number(assessment_id);
-
-  // Checking to see if the courseid and assessmentid are valid
-  if (Number.isNaN(courseIdNumber) || Number.isNaN(assessmentIdNumber)) {
-    throw new Error(
-      'Notebook metadata values "course_id" and "assessment_id" must be numbers.'
-    );
-  }
-
-  // Creating the submission url
   try {
-    new URL(String(url));
+    const parsed = new URL(url);
+
+    if (!parsed.protocol || !parsed.host) {
+      throw new Error('Invalid URL.');
+    }
   } catch {
     throw new Error(
-      'Notebook metadata value "url" must be a valid URL, for example "http://localhost:8000".'
+      'Notebook metadata value "url" must be a full valid MarkUs URL, for example "http://localhost:3000/csc108".'
+    );
+  }
+
+  return url;
+}
+
+// Normalize the Submission endpoint
+function normalizeSubmitEndpoint(value: unknown): string {
+  // Important:
+  // Do not force a leading slash here.
+  // If MarkUs is mounted under /csc108, then:
+  //   url = http://localhost:3000/csc108
+  //   submit_endpoint = api/jupyter_submissions
+  // should become:
+  //   http://localhost:3000/csc108/api/jupyter_submissions
+  return parseOptionalString(value, 'submit_endpoint') || 'api/jupyter_submissions';
+}
+
+// Getting the MarkUs info from metadata
+function getMarkUsMetadata(panel: NotebookPanel): INormalizedMarkUsMetadata {
+  const rawValue = getRawNotebookMetadata(panel, 'markus');
+
+  console.info(`[${SUBMIT_LABEL}] Raw MarkUs notebook metadata:`, rawValue);
+
+  const rawMetadata = metadataValueToObject(rawValue);
+
+  if (!rawMetadata) {
+    throw new Error(
+      'Notebook metadata is missing the top-level "markus" object. Please add metadata.markus with url, course/assignment or course_id/assessment_id.'
+    );
+  }
+
+  const url = normalizeMarkUsUrl(rawMetadata.url);
+  const course = parseOptionalString(rawMetadata.course, 'course');
+  const assignment = parseOptionalString(rawMetadata.assignment, 'assignment');
+  const courseId = parseOptionalNumber(rawMetadata.course_id, 'course_id');
+  const assessmentId = parseOptionalNumber(rawMetadata.assessment_id, 'assessment_id');
+  const submitEndpoint = normalizeSubmitEndpoint(rawMetadata.submit_endpoint);
+
+  const hasHumanReadableTarget = Boolean(course && assignment);
+  const hasNumericTarget = courseId !== undefined && assessmentId !== undefined;
+
+  if (!hasHumanReadableTarget && !hasNumericTarget) {
+    throw new Error(
+      'Notebook metadata must include either "course" and "assignment", or "course_id" and "assessment_id".'
     );
   }
 
   return {
-    ...markusMetadata,
-    course_id: courseIdNumber,
-    assessment_id: assessmentIdNumber
+    url,
+    course,
+    assignment,
+    course_id: courseId,
+    assessment_id: assessmentId,
+    submit_endpoint: submitEndpoint
   };
 }
 
-// Compiling the submission payload
-function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata): ISubmitPayload {
-  const notebookPath = panel.context.path;
-
-  if (!notebookPath) {
-    throw new Error('Could not determine notebook path.');
-  }
-
-  const notebookName =
+// Getting the notebook name for submission
+function getNotebookName(panel: NotebookPanel): string {
+  return (
     panel.context.contentsModel?.name ||
-    notebookPath.split('/').pop();
+    panel.context.path.split('/').pop() ||
+    'notebook.ipynb'
+  );
+}
 
-  if (!notebookName) {
-    throw new Error(
-      'Could not determine notebook name from context. Please ensure the notebook is saved.'
-    );
+function joinUrlParts(origin: string, baseUrl: string): string {
+  const normalizedOrigin = origin.replace(/\/+$/, '');
+  const normalizedBase = baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`;
+
+  return `${normalizedOrigin}${normalizedBase}`;
+}
+
+function getJupyterFullUrl(notebookPath: string): string {
+  const baseUrl = PageConfig.getBaseUrl() || '/';
+  const jupyterRoot = joinUrlParts(window.location.origin, baseUrl);
+  const encodedPath = notebookPath.split('/').map(encodeURIComponent).join('/');
+  const treePath = `lab/tree/${encodedPath}`;
+
+  return new URL(treePath, jupyterRoot).toString();
+}
+
+// Getting the Jupyter Token
+function getJupyterToken(): string {
+  const pageConfigToken = PageConfig.getToken();
+
+  if (pageConfigToken && pageConfigToken.trim().length > 0) {
+    return pageConfigToken.trim();
   }
 
-  const jupyterBaseUrl = PageConfig.getBaseUrl();
-  const jupyterOrigin = window.location.origin;
+  const urlToken = new URLSearchParams(window.location.search).get('token');
 
-  const jupyterToken = PageConfig.getToken();
-
-  if (!jupyterToken) {
-    throw new Error(
-      'No Jupyter token available. This environment may be using cookie/OAuth authentication. Token-based pull may not work.'
-    );
+  if (urlToken && urlToken.trim().length > 0) {
+    return urlToken.trim();
   }
+
+  const bodyToken = document.body.dataset.jupyterApiToken;
+
+  if (bodyToken && bodyToken.trim().length > 0) {
+    return bodyToken.trim();
+  }
+
+  return '';
+}
+
+// Creating the Payload object
+function buildSubmitPayload(panel: NotebookPanel, markus: INormalizedMarkUsMetadata): ISubmitPayload {
+  const notebookPath = panel.context.path;
+  const notebookName = getNotebookName(panel);
+
+  // This is the requested change:
+  // always submit using the actual current notebook file name.
+  const destinationPath = notebookName;
 
   return {
+    course: markus.course,
+    assignment: markus.assignment,
+    course_id: markus.course_id,
+    assessment_id: markus.assessment_id,
     notebook_path: notebookPath,
     notebook_name: notebookName,
-    jupyter_base_url: jupyterBaseUrl,
-    jupyter_origin: jupyterOrigin,
-    jupyter_token: jupyterToken,
-    markus
+    destination_path: destinationPath,
+    jupyter: {
+      base_url: PageConfig.getBaseUrl() || '/',
+      origin: window.location.origin,
+      full_url: getJupyterFullUrl(notebookPath),
+      token: getJupyterToken()
+    }
   };
 }
 
-// Sending the pull request to the server
-async function submitPullRequest(payload: ISubmitPayload): Promise<ISubmitResponse> {
-  const markusBaseUrl = String(payload.markus.url).replace(/\/+$/, '');
-  const submitUrl = `${markusBaseUrl}/api/submit`;
+// Creating the Submission URL
+function buildSubmitUrl(markus: INormalizedMarkUsMetadata): string {
+  const baseUrl = markus.url.endsWith('/') ? markus.url : `${markus.url}/`;
+  return new URL(markus.submit_endpoint, baseUrl).toString();
+}
+
+// Awaiting for responses from MarkUS server
+async function postSubmission(
+  markus: INormalizedMarkUsMetadata,
+  payload: ISubmitPayload
+): Promise<ISubmitResponse> {
+  const submitUrl = buildSubmitUrl(markus);
+
+  console.info(`[${SUBMIT_LABEL}] POST ${submitUrl}`);
+  console.info(`[${SUBMIT_LABEL}] Payload:`, payload);
 
   const response = await fetch(submitUrl, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json'
@@ -168,42 +328,49 @@ async function submitPullRequest(payload: ISubmitPayload): Promise<ISubmitRespon
     body: JSON.stringify(payload)
   });
 
-  const text = await response.text();
+  const responseText = await response.text();
 
   if (!response.ok) {
-    throw new Error(`MarkUs server error ${response.status}: ${text}`);
+    throw new Error(`MarkUs returned HTTP ${response.status}: ${responseText}`);
+  }
+
+  if (!responseText) {
+    return { status: 'success', message: 'Submission completed.' };
   }
 
   try {
-    return JSON.parse(text) as ISubmitResponse;
+    return JSON.parse(responseText) as ISubmitResponse;
   } catch {
-    return {
-      status: 'ok',
-      message: text
-    };
+    return { status: 'success', message: responseText };
   }
 }
 
-// Confirming the submission is successful
 async function reportSuccess(result: ISubmitResponse): Promise<void> {
-  let body = result.message || 'Your file has been submitted successfully.';
+  const lines: string[] = [result.message || 'Your file has been submitted to MarkUs.'];
+
+  if (result.submitted_file) {
+    lines.push(`Submitted file: ${result.submitted_file}`);
+  }
 
   if (result.saved_file) {
-    body += `\n\nSaved file: ${result.saved_file}`;
+    lines.push(`Saved file: ${result.saved_file}`);
+  }
+
+  if (result.commit_revision) {
+    lines.push(`Commit: ${result.commit_revision}`);
   }
 
   if (result.assessment_url) {
-    body += `\n\nAssessment URL: ${result.assessment_url}`;
+    lines.push(`Assessment URL: ${result.assessment_url}`);
   }
 
   await showDialog({
     title: SUBMIT_LABEL,
-    body,
+    body: lines.join('\n\n'),
     buttons: [Dialog.okButton({ label: 'Close' })]
   });
 }
 
-// Report any errors
 async function reportError(error: unknown): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
 
@@ -211,24 +378,22 @@ async function reportError(error: unknown): Promise<void> {
 
   await showDialog({
     title: SUBMIT_LABEL,
-    body: `[ERROR] Could not submit file to MarkUs. Cause: ${message}`,
+    body: `Could not submit the file to MarkUs.\n\n${message}`,
     buttons: [Dialog.okButton({ label: 'Close' })]
   });
 }
 
-// Submitting the file to server
+// Submitting the notebook to MarkUs
 async function submitToMarkUs(tracker: INotebookTracker): Promise<void> {
   try {
     const panel = getCurrentNotebookPanel(tracker);
 
     await panel.context.save();
 
-    const markus = getMarkusMetadata(panel);
+    const markus = getMarkUsMetadata(panel);
     const payload = buildSubmitPayload(panel, markus);
 
-    console.info('submit_btn: Sending MarkUs pull request payload:', payload);
-
-    const result = await submitPullRequest(payload);
+    const result = await postSubmission(markus, payload);
 
     await reportSuccess(result);
   } catch (error) {
@@ -236,27 +401,27 @@ async function submitToMarkUs(tracker: INotebookTracker): Promise<void> {
   }
 }
 
-// Adding the function as a toolbar button
+// Adding the toolbar button in Jupyter environment
 function addToolbarButton(panel: NotebookPanel, app: JupyterFrontEnd): void {
-  if (Array.from(panel.toolbar.names()).includes(COMMAND_ID)) {
+  if (Array.from(panel.toolbar.names()).includes(TOOLBAR_ITEM_NAME)) {
     return;
   }
 
   const button = new ToolbarButton({
-    label: SUBMIT_LABEL,
+    label: 'Submit',
     tooltip: SUBMIT_LABEL,
     onClick: () => {
       void app.commands.execute(COMMAND_ID);
     }
   });
 
-  panel.toolbar.insertItem(10, COMMAND_ID, button);
+  panel.toolbar.insertItem(10, TOOLBAR_ITEM_NAME, button);
 }
 
-// Creating the Jupyter Frontend Plugin
 const plugin: JupyterFrontEndPlugin<void> = {
   id: 'submit_btn:plugin',
-  description: 'Submit the current notebook to a MarkUs test server by asking the server to pull it from JupyterHub/Jupyter Server.',
+  description:
+    'Submit the current notebook to MarkUs by sending notebook metadata and Jupyter access information to a MarkUs submission endpoint.',
   autoStart: true,
   requires: [INotebookTracker],
   optional: [ICommandPalette],

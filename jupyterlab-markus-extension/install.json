@@ -1,5 +1,0 @@
-{
-  "packageManager": "python",
-  "packageName": "submit_btn",
-  "uninstallInstructions": "Remove the labextension files or reinstall the package."
-}

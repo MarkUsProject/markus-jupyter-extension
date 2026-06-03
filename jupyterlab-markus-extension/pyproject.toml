@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "submit_btn"
-version = "0.1.0"
-description = "JupyterLab extension to submit notebook to backend server"
+version = "0.2.0"
+description = "JupyterLab extension to submit the current notebook to MarkUs"
 readme = "README.md"
 requires-python = ">=3.8"
 
