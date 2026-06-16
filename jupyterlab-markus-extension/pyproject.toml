@@ -3,19 +3,19 @@ requires = ["hatchling>=1.10.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "submit_btn"
-version = "0.2.0"
-description = "JupyterLab extension to submit the current notebook to MarkUs"
+name = "jupyterlab-markus-extension"
+version = "0.1.0"
+description = "JupyterLab extension to submit notebook to MarkUs"
 readme = "README.md"
 requires-python = ">=3.8"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["submit_btn", "install.json"]
+only-include = ["jupyterlab_markus_extension", "install.json"]
 
 [tool.hatch.build.targets.wheel.sources]
-"submit_btn" = "submit_btn"
+"jupyterlab_markus_extension" = "jupyterlab_markus_extension"
 "install.json" = "install.json"
 
 [tool.hatch.build.targets.wheel.shared-data]
-"submit_btn/labextension" = "share/jupyter/labextensions/submit_btn"
-"install.json" = "share/jupyter/labextensions/submit_btn/install.json"
+"jupyterlab_markus_extension/labextension" = "share/jupyter/labextensions/jupyterlab-markus-extension"
+"install.json" = "share/jupyter/labextensions/jupyterlab-markus-extension/install.json"

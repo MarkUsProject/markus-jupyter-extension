@@ -1,14 +1,13 @@
 {
-  "name": "submit_btn",
-  "version": "0.2.0",
-  "description": "JupyterLab extension to submit the current notebook to MarkUs",
+  "name": "jupyterlab-markus-extension",
+  "version": "0.1.0",
+  "description": "JupyterLab extension to submit notebook to backend server",
   "keywords": [
     "jupyter",
     "jupyterlab",
-    "jupyterlab-extension",
-    "markus"
+    "jupyterlab-extension"
   ],
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "author": "Tianshu",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -27,7 +26,7 @@
     "build:lib": "tsc --sourceMap",
     "build:lib:prod": "tsc",
     "clean": "rimraf lib tsconfig.tsbuildinfo",
-    "clean:all": "rimraf lib tsconfig.tsbuildinfo submit_btn/labextension",
+    "clean:all": "rimraf lib tsconfig.tsbuildinfo jupyterlab-markus-extension/labextension",
     "watch": "tsc -w --sourceMap"
   },
   "dependencies": {
@@ -45,6 +44,6 @@
   },
   "jupyterlab": {
     "extension": "lib/index.js",
-    "outputDir": "submit_btn/labextension"
+    "outputDir": "jupyterlab-markus-extension/labextension"
   }
 }
