@@ -22,7 +22,6 @@
     "build": "jlpm build:lib && jlpm build:labextension:dev",
     "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
     "build:labextension": "jupyter labextension build .",
-    "build:labextension:dev": "jupyter labextension build . --development True",
     "build:lib": "tsc --sourceMap",
     "build:lib:prod": "tsc",
     "clean": "rimraf lib tsconfig.tsbuildinfo",

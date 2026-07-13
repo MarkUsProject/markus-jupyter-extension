@@ -16,7 +16,6 @@ MarkUs then uses the Jupyter token and notebook path to fetch the file from Jupy
 
 This extension requires:
 
-* JupyterLab 4
 * Python 3.8+
 * Node.js / npm or jlpm
 * A running MarkUs instance with the Jupyter submission endpoint enabled

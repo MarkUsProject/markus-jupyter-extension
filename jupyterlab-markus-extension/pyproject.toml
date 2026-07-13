@@ -1,21 +1,47 @@
 [build-system]
-requires = ["hatchling>=1.10.0"]
+requires = [
+    "hatchling>=1.10.0",
+    "hatch-jupyter-builder>=0.5",
+    "jupyterlab>=4,<5",
+]
 build-backend = "hatchling.build"
 
 [project]
-name = "jupyterlab-markus-extension"
+name = "submit_btn"
 version = "0.1.0"
-description = "JupyterLab extension to submit notebook to MarkUs"
+description = "JupyterLab extension to submit notebooks to MarkUs"
 readme = "README.md"
 requires-python = ">=3.8"
+dependencies = [
+    "jupyterlab>=4,<5",
+]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["jupyterlab_markus_extension", "install.json"]
+only-include = [
+    "submit_btn",
+    "install.json",
+]
 
 [tool.hatch.build.targets.wheel.sources]
-"jupyterlab_markus_extension" = "jupyterlab_markus_extension"
+"submit_btn" = "submit_btn"
 "install.json" = "install.json"
 
 [tool.hatch.build.targets.wheel.shared-data]
-"jupyterlab_markus_extension/labextension" = "share/jupyter/labextensions/jupyterlab-markus-extension"
-"install.json" = "share/jupyter/labextensions/jupyterlab-markus-extension/install.json"
+"submit_btn/labextension" = "share/jupyter/labextensions/submit_btn"
+"install.json" = "share/jupyter/labextensions/submit_btn/install.json"
+
+[tool.hatch.build.hooks.jupyter-builder]
+dependencies = [
+    "hatch-jupyter-builder>=0.5",
+]
+build-function = "hatch_jupyter_builder.npm_builder"
+
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+build_cmd = "build:prod"
+npm = ["jlpm"]
+
+[tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
+build_cmd = "build:prod"
+npm = ["jlpm"]
+source_dir = "src"
+build_dir = "submit_btn/labextension"
