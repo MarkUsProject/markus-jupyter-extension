@@ -16,51 +16,66 @@ MarkUs then uses the Jupyter token and notebook path to fetch the file from Jupy
 
 This extension requires:
 
-* Python 3.8+
-* Node.js / npm or jlpm
-* A running MarkUs instance with the Jupyter submission endpoint enabled
-* A notebook containing valid MarkUs metadata
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) for managing the Python environment
+- Node.js and [pnpm](https://pnpm.io/) for building the JavaScript/TypeScript source
+- A running MarkUs instance with the Jupyter submission endpoint enabled
+- A notebook containing valid MarkUs metadata
 
 ## Install the extension for development
 
-From the root of this extension project, install the package in editable mode:
+From the root of this extension project, sync the Python environment (this pulls in JupyterLab and the build tooling, declared as a `dev` dependency group, which `uv sync` includes by default):
 
 ```bash
-pip install -e .
+uv sync
 ```
 
 Then install the JavaScript dependencies:
 
 ```bash
-jlpm install
+pnpm install
 ```
 
 Build the extension:
 
 ```bash
-jlpm build
+uv run jupyter-builder build --development True .
 ```
 
-If you are actively developing the extension, you can also use:
+If you are actively developing the TypeScript source, you can watch and recompile it on save in one terminal:
 
 ```bash
-jlpm watch
+pnpm run watch
 ```
+
+Note that `pnpm run watch` only recompiles `lib/`; it does not re-run the webpack/rspack bundling step, so after a source change you still need to re-run the `jupyter-builder build` command above (or the `pnpm run build` script, which does the same thing) before the browser will see it.
+
+Next, tell JupyterLab where to find the built extension. This only needs to be done once per fresh `uv sync`/virtual environment:
+
+```bash
+uv run jupyter-builder develop . --overwrite
+```
+
+> **Windows note:** this command creates a symlink, which requires either [Developer Mode](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development) to be enabled or an elevated (admin) shell. Without either, it fails with an `OSError` about symlink permissions. If you can't enable Developer Mode, use the underlying function directly with `symlink=False` (copies the files instead of linking them — you'll need to re-run it after every rebuild since it won't pick up changes automatically):
+>
+> ```bash
+> uv run python -c "from jupyter_builder.federated_extensions import develop_labextension_py; develop_labextension_py('.', sys_prefix=True, overwrite=True, symlink=False)"
+> ```
 
 In another terminal, run JupyterLab:
 
 ```bash
-jupyter lab
+uv run jupyter lab
 ```
 
-If JupyterLab is already running, restart it after building the extension.
+If JupyterLab is already running, restart it after rebuilding the extension.
 
 ## Verify the extension is installed
 
 Run:
 
 ```bash
-jupyter labextension list
+uv run jupyter labextension list
 ```
 
 You should see an extension named:
@@ -69,15 +84,17 @@ You should see an extension named:
 jupyterlab-markus-extension
 ```
 
+listed as `enabled ok`.
+
 ## Notebook metadata
 
 Each notebook that should be submitted to MarkUs must include top-level notebook metadata named `markus`.
 
 The metadata must include:
 
-* `url`: the base URL of the MarkUs server
-* either `course_id` or `course`
-* either `assignment_id` or `assignment`
+- `url`: the base URL of the MarkUs server
+- either `course_id` or `course`
+- either `assignment_id` or `assignment`
 
 The meaning of each field is:
 
@@ -199,7 +216,7 @@ bin/rails server
 
 ```bash
 # Terminal 2: JupyterLab
-jupyter lab
+uv run jupyter lab
 ```
 
 The notebook metadata `url` should point to your MarkUs server, for example:
@@ -236,39 +253,39 @@ relative to that base URL.
 
 ## Build commands
 
-Build the TypeScript package and labextension:
+Build the TypeScript package and labextension (development mode):
 
 ```bash
-jlpm build
+pnpm run build
 ```
 
 Build for production:
 
 ```bash
-jlpm build:prod
+pnpm run build:prod
 ```
 
 Clean generated files:
 
 ```bash
-jlpm clean
+pnpm run clean
 ```
 
 Clean all generated files, including the labextension output:
 
 ```bash
-jlpm clean:all
+pnpm run clean:all
 ```
 
 ## Uninstall
 
-To uninstall the editable Python package:
+To remove the extension from a JupyterLab environment, delete the labextension symlink (or copy) that `jupyter-builder develop` created under the virtual environment's `share` directory:
 
 ```bash
-pip uninstall jupyterlab-markus-extension
+rm -rf .venv/share/jupyter/labextensions/jupyterlab-markus-extension
 ```
 
-Then rebuild or restart JupyterLab as needed.
+Alternatively, just remove the project's `.venv` and re-sync without it, or start from a fresh virtual environment.
 
 ## Troubleshooting
 
@@ -277,15 +294,21 @@ Then rebuild or restart JupyterLab as needed.
 Run:
 
 ```bash
-jupyter labextension list
+uv run jupyter labextension list
 ```
 
-Confirm that `jupyterlab-markus-extension` appears in the list.
+Confirm that `jupyterlab-markus-extension` appears in the list as `enabled ok`.
 
-If it does not, rebuild the extension:
+If it's missing entirely, JupyterLab likely doesn't know where to find the built extension yet — run the develop step (see [Install the extension for development](#install-the-extension-for-development)):
 
 ```bash
-jlpm build
+uv run jupyter-builder develop . --overwrite
+```
+
+If it's listed but stale, rebuild the extension:
+
+```bash
+uv run jupyter-builder build --development True .
 ```
 
 Then restart JupyterLab.
