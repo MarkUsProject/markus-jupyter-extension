@@ -6,7 +6,7 @@
 jest.mock('@jupyterlab/application', () => ({}));
 jest.mock('@jupyterlab/apputils', () => ({
   ICommandPalette: {},
-  Dialog: { okButton: jest.fn() },
+  Dialog: { okButton: jest.fn(), cancelButton: jest.fn() },
   showDialog: jest.fn(),
   ToolbarButton: jest.fn()
 }));
@@ -21,6 +21,13 @@ jest.mock('@jupyterlab/notebook', () => ({
 }));
 jest.mock('@jupyterlab/settingregistry', () => ({
   ISettingRegistry: {}
+}));
+// Real @lumino/widgets pulls in @lumino/dragdrop, which references the
+// browser's `DragEvent` global -- unavailable in this jsdom version. Not
+// used by anything under test (only by the confirmation dialog's body,
+// which isn't exported/unit-tested), so a bare stand-in is enough.
+jest.mock('@lumino/widgets', () => ({
+  Widget: jest.fn()
 }));
 
 import { PageConfig } from '@jupyterlab/coreutils';

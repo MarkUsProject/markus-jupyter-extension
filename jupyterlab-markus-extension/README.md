@@ -234,6 +234,7 @@ A typical local setup is:
 3. Open a notebook.
 4. Add the required `markus` metadata.
 5. Click **Submit to MarkUs** in the notebook toolbar.
+6. Review the confirmation dialog, which shows the URL, course, and assignment the notebook is about to be submitted to, and click **Submit** to proceed.
 
 Example:
 
