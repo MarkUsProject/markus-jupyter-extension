@@ -1,33 +1,34 @@
 // Import Jupyter Front End components
-import {
-  JupyterFrontEnd,
-  JupyterFrontEndPlugin
-} from '@jupyterlab/application';
+import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 
 // Import Command components
-import {
-  ICommandPalette,
-  showDialog,
-  Dialog
-} from '@jupyterlab/apputils';
+import { ICommandPalette, showDialog, Dialog } from '@jupyterlab/apputils';
 
 // Getting JupyterLab coreutils
 import { PageConfig } from '@jupyterlab/coreutils';
 
 // Getting notebook components
-import {
-  INotebookTracker,
-  NotebookPanel
-} from '@jupyterlab/notebook';
+import { INotebookTracker, NotebookPanel } from '@jupyterlab/notebook';
 
 // Import to get toolbar button
 import { ToolbarButton } from '@jupyterlab/apputils';
+
+// Import for the trusted-origins setting
+import { ISettingRegistry } from '@jupyterlab/settingregistry';
+
+// This code never actually runs under Node (tsconfig deliberately omits
+// Node's ambient types to keep the global namespace browser-only) --
+// `process.env.NODE_ENV` is a build-time string substituted in by the
+// bundler based on --development/production mode, not a real runtime value.
+declare const process: { env: { NODE_ENV?: string } };
 
 // Declaring necessary variables
 const ACTION_PREFIX = 'markus';
 const ACTION_NAME = 'markus_submit';
 const COMMAND_ID = `${ACTION_PREFIX}:${ACTION_NAME}`;
 const SUBMIT_LABEL = 'Submit to MarkUs';
+const PLUGIN_ID = 'jupyterlab-markus-extension:plugin';
+const TRUSTED_ORIGINS_KEY = 'trustedOrigins';
 
 // Creating the Metadata space
 interface IMarkUsMetadata {
@@ -108,22 +109,58 @@ function normalizeBaseUrl(value: string): string {
     throw new Error('MarkUs URL cannot be blank.');
   }
 
-  const url = new URL(trimmed);
+  let url: URL;
+
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error(`Notebook metadata value "url" is not a valid URL: "${trimmed}".`);
+  }
+
+  // Ensure url.pathname ends in a '/'
   url.pathname = url.pathname.replace(/\/?$/, '/');
 
   return url.toString();
 }
 
+// Always-trusted origins, used in development for MarkUs URL validation.
+const DEVELOPMENT_DEFAULT_TRUSTED_ORIGINS: string[] =
+  process.env.NODE_ENV !== 'production' ? ['http://localhost:3000'] : [];
+
+// Read the trusted-origins setting, filtering out any malformed entries and
+// always including the development-only origins (a no-op in production).
+function getTrustedOrigins(settings: ISettingRegistry.ISettings): string[] {
+  const value = settings.get(TRUSTED_ORIGINS_KEY).composite;
+  const configured = Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+
+  return Array.from(new Set([...configured, ...DEVELOPMENT_DEFAULT_TRUSTED_ORIGINS]));
+}
+
+// Reject submission targets that are not explicitly trusted.
+function assertTrustedOrigin(url: string, trustedOrigins: string[]): void {
+  const origin = new URL(url).origin;
+
+  if (trustedOrigins.length === 0) {
+    throw new Error(
+      'No trusted MarkUs origins are configured. Ask a JupyterLab administrator to add this MarkUs URL to the "Submit to MarkUs" settings (Settings > Settings Editor > Submit to MarkUs) before submitting.'
+    );
+  }
+
+  if (!trustedOrigins.includes(origin)) {
+    throw new Error(
+      `MarkUs origin "${origin}" is not trusted. Trusted origins: ${trustedOrigins.join(
+        ', '
+      )}. Ask a JupyterLab administrator to add it to the "Submit to MarkUs" settings if this is expected.`
+    );
+  }
+}
+
 // Get notebook name from JupyterLab context.
 function getNotebookName(panel: NotebookPanel): string {
-  const notebookName =
-    panel.context.contentsModel?.name ||
-    panel.context.path.split('/').pop();
+  const notebookName = panel.context.contentsModel?.name || panel.context.path.split('/').pop();
 
   if (!notebookName) {
-    throw new Error(
-      'Could not determine notebook name. Please ensure the notebook is saved.'
-    );
+    throw new Error('Could not determine notebook name. Please ensure the notebook is saved.');
   }
 
   return notebookName;
@@ -145,33 +182,23 @@ function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
   const { url, course_id, course, assignment_id, assignment } = markusMetadata;
 
   if (!url) {
-    throw new Error(
-      'Notebook metadata is missing required MarkUs key: "url".'
-    );
+    throw new Error('Notebook metadata is missing required MarkUs key: "url".');
   }
 
   if (!course_id && !course) {
-    throw new Error(
-      'Notebook metadata must include either "course_id" or "course".'
-    );
+    throw new Error('Notebook metadata must include either "course_id" or "course".');
   }
 
   if (!assignment_id && !assignment) {
-    throw new Error(
-      'Notebook metadata must include either "assignment_id" or "assignment".'
-    );
+    throw new Error('Notebook metadata must include either "assignment_id" or "assignment".');
   }
 
   if (course_id && course) {
-    throw new Error(
-      'Notebook metadata should include only one of "course_id" or "course", not both.'
-    );
+    throw new Error('Notebook metadata should include only one of "course_id" or "course", not both.');
   }
 
   if (assignment_id && assignment) {
-    throw new Error(
-      'Notebook metadata should include only one of "assignment_id" or "assignment", not both.'
-    );
+    throw new Error('Notebook metadata should include only one of "assignment_id" or "assignment", not both.');
   }
 
   let normalizedCourseId: number | undefined;
@@ -181,9 +208,7 @@ function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
     normalizedCourseId = Number(course_id);
 
     if (Number.isNaN(normalizedCourseId)) {
-      throw new Error(
-        'Notebook metadata value "course_id" must be a number.'
-      );
+      throw new Error('Notebook metadata value "course_id" must be a number.');
     }
   }
 
@@ -191,26 +216,22 @@ function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
     normalizedAssignmentId = Number(assignment_id);
 
     if (Number.isNaN(normalizedAssignmentId)) {
-      throw new Error(
-        'Notebook metadata value "assignment_id" must be a number.'
-      );
+      throw new Error('Notebook metadata value "assignment_id" must be a number.');
     }
   }
 
-  normalizeBaseUrl(String(url));
+  const normalizedUrl = normalizeBaseUrl(String(url));
 
   return {
     ...markusMetadata,
+    url: normalizedUrl,
     course_id: normalizedCourseId ?? course_id,
     assignment_id: normalizedAssignmentId ?? assignment_id
   };
 }
 
 // Compiling the submission payload
-function buildSubmitPayload(
-  panel: NotebookPanel,
-  markus: IMarkUsMetadata
-): ISubmitPayload {
+function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata): ISubmitPayload {
   const notebookPath = panel.context.path;
 
   if (!notebookPath) {
@@ -247,12 +268,8 @@ function buildSubmitPayload(
 }
 
 // Sending the submission request to the MarkUs server
-async function submitToServer(
-  payload: ISubmitPayload,
-  markus: IMarkUsMetadata
-): Promise<ISubmitResponse> {
-  const markusBaseUrl = normalizeBaseUrl(String(markus.url));
-  const submitUrl = new URL('jupyter/submit', markusBaseUrl).toString();
+async function submitToServer(payload: ISubmitPayload, markus: IMarkUsMetadata): Promise<ISubmitResponse> {
+  const submitUrl = new URL('jupyter/submit', markus.url).toString();
 
   const response = await fetch(submitUrl, {
     method: 'POST',
@@ -316,19 +333,15 @@ async function reportError(error: unknown): Promise<void> {
 }
 
 // Submitting the file to server
-async function submitToMarkUs(tracker: INotebookTracker): Promise<void> {
+async function submitToMarkUs(tracker: INotebookTracker, settings: ISettingRegistry.ISettings): Promise<void> {
   try {
     const panel = getCurrentNotebookPanel(tracker);
 
     await panel.context.save();
 
     const markus = getMarkusMetadata(panel);
+    assertTrustedOrigin(markus.url, getTrustedOrigins(settings));
     const payload = buildSubmitPayload(panel, markus);
-
-    console.info(
-      'jupyterlab-markus-extension: Sending MarkUs submission payload:',
-      payload
-    );
 
     const result = await submitToServer(payload, markus);
 
@@ -357,23 +370,26 @@ function addToolbarButton(panel: NotebookPanel, app: JupyterFrontEnd): void {
 
 // Creating the Jupyter Frontend Plugin
 const plugin: JupyterFrontEndPlugin<void> = {
-  id: 'jupyterlab-markus-extension:plugin',
+  id: PLUGIN_ID,
   description: 'Submit the current notebook to MarkUs by asking MarkUs to fetch it from JupyterHub/Jupyter Server.',
   autoStart: true,
-  requires: [INotebookTracker],
+  requires: [INotebookTracker, ISettingRegistry],
   optional: [ICommandPalette],
-  activate: (
+  activate: async (
     app: JupyterFrontEnd,
     tracker: INotebookTracker,
+    settingRegistry: ISettingRegistry,
     palette: ICommandPalette | null
   ) => {
     console.log('JupyterLab extension jupyterlab-markus-extension is activated.');
+
+    const settings = await settingRegistry.load(PLUGIN_ID);
 
     app.commands.addCommand(COMMAND_ID, {
       label: SUBMIT_LABEL,
       caption: SUBMIT_LABEL,
       execute: async () => {
-        await submitToMarkUs(tracker);
+        await submitToMarkUs(tracker, settings);
       }
     });
 

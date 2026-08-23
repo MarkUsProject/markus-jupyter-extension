@@ -37,6 +37,7 @@
     "@jupyterlab/mainmenu": "^4.0.0",
     "@jupyterlab/notebook": "^4.0.0",
     "@jupyterlab/rendermime-interfaces": "^3.8.0",
+    "@jupyterlab/settingregistry": "^4.0.0",
     "@lumino/widgets": "^2.1.0"
   },
   "devDependencies": {
@@ -49,6 +50,7 @@
   },
   "jupyterlab": {
     "extension": true,
-    "outputDir": "jupyterlab_markus_extension/labextension"
+    "outputDir": "jupyterlab_markus_extension/labextension",
+    "schemaDir": "schema"
   }
 }
