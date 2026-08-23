@@ -123,6 +123,21 @@ function normalizeBaseUrl(value: string): string {
   return url.toString();
 }
 
+// Parse a MarkUs id field (course_id / assignment_id) as a positive integer.
+// Deliberately stricter than `Number(...)`, which would also accept "",
+// "1e3", "0x1F", "Infinity", leading/trailing whitespace, and non-integers
+// like "1.5" -- none of which are valid database primary keys.
+export function parseMarkusId(value: number | string, fieldName: string): number {
+  const isValidNumber = typeof value === 'number' && Number.isInteger(value) && value > 0;
+  const isValidString = typeof value === 'string' && /^[1-9]\d*$/.test(value);
+
+  if (!isValidNumber && !isValidString) {
+    throw new Error(`Notebook metadata value "${fieldName}" must be a positive integer.`);
+  }
+
+  return Number(value);
+}
+
 // Always-trusted origins, used in development for MarkUs URL validation.
 const DEVELOPMENT_DEFAULT_TRUSTED_ORIGINS: string[] =
   process.env.NODE_ENV !== 'production' ? ['http://localhost:3000'] : [];
@@ -205,19 +220,11 @@ function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
   let normalizedAssignmentId: number | undefined;
 
   if (course_id) {
-    normalizedCourseId = Number(course_id);
-
-    if (Number.isNaN(normalizedCourseId)) {
-      throw new Error('Notebook metadata value "course_id" must be a number.');
-    }
+    normalizedCourseId = parseMarkusId(course_id, 'course_id');
   }
 
   if (assignment_id) {
-    normalizedAssignmentId = Number(assignment_id);
-
-    if (Number.isNaN(normalizedAssignmentId)) {
-      throw new Error('Notebook metadata value "assignment_id" must be a number.');
-    }
+    normalizedAssignmentId = parseMarkusId(assignment_id, 'assignment_id');
   }
 
   const normalizedUrl = normalizeBaseUrl(String(url));
