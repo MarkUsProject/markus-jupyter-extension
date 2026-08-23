@@ -9,8 +9,8 @@
   ],
   "license": "MIT",
   "author": "Tianshu",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "main": "lib/jupyterlab-markus-extension.js",
+  "types": "lib/jupyterlab-markus-extension.d.ts",
   "style": "style/index.css",
   "files": [
     "lib/**/*",
@@ -19,12 +19,14 @@
     "schema/*.json"
   ],
   "scripts": {
-    "build": "jlpm build:lib && jlpm build:labextension:dev",
-    "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
-    "build:labextension": "jupyter labextension build .",
+    "build": "pnpm run build:lib && pnpm run build:labextension:dev",
+    "build:prod": "pnpm run clean && pnpm run build:lib:prod && pnpm run build:labextension",
+    "build:labextension": "jupyter-builder build .",
+    "build:labextension:dev": "jupyter-builder build --development True .",
     "build:lib": "tsc --sourceMap",
     "build:lib:prod": "tsc",
-    "clean": "rimraf lib tsconfig.tsbuildinfo",
+    "clean": "pnpm run clean:lib",
+    "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
     "clean:all": "rimraf lib tsconfig.tsbuildinfo jupyterlab-markus-extension/labextension",
     "watch": "tsc -w --sourceMap"
   },
@@ -34,15 +36,19 @@
     "@jupyterlab/coreutils": "^6.5.4",
     "@jupyterlab/mainmenu": "^4.0.0",
     "@jupyterlab/notebook": "^4.0.0",
-    "@lumino/widgets": "^2.0.0"
+    "@jupyterlab/rendermime-interfaces": "^3.8.0",
+    "@lumino/widgets": "^2.1.0"
   },
   "devDependencies": {
-    "@jupyterlab/builder": "^4.0.0",
+    "@jupyter/builder": "^1.2.0",
+    "@jupyterlab/core-meta": "^4.6.1",
+    "css-loader": "^7.1.4",
     "rimraf": "^5.0.1",
+    "style-loader": "^4.0.0",
     "typescript": "~5.7.3"
   },
   "jupyterlab": {
-    "extension": "lib/index.js",
+    "extension": true,
     "outputDir": "jupyterlab-markus-extension/labextension"
   }
 }
