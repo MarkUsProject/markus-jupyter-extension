@@ -86,6 +86,34 @@ jupyterlab-markus-extension
 
 listed as `enabled ok`.
 
+## Trusted MarkUs origins
+
+Submitting a notebook sends the user's Jupyter API token to the MarkUs URL from the notebook's `markus` metadata. The extension setting `trustedOrigins` specifies a list of trusted MarkUs origins (default `["https://markus.teach.cs.toronto.edu"]`)
+
+To override it for a single user, open **Settings > Settings Editor > Submit to MarkUs** in JupyterLab and set the MarkUs origin(s), for example:
+
+```json
+{
+  "trustedOrigins": ["https://markus.example.com"]
+}
+```
+
+To override it deployment-wide (recommended for a real deployment, so every user gets it automatically), add an `overrides.json` to JupyterLab's settings directory:
+
+```json
+{
+  "jupyterlab-markus-extension:plugin": {
+    "trustedOrigins": ["https://markus.example.com"]
+  }
+}
+```
+
+See the [JupyterLab documentation on settings overrides](https://jupyterlab.readthedocs.io/en/stable/user/directories.html#overridesjson) for where `overrides.json` should live.
+
+An origin is the scheme, host, and port only (no path). A notebook's `markus.url` must resolve to one of the trusted origins, or the submission is rejected with an error naming the untrusted origin.
+
+**Development only**: `http://localhost:3000` is also trusted, as this is the default MarkUs development origin (see [Local development with MarkUs](#local-development-with-markus)).
+
 ## Notebook metadata
 
 Each notebook that should be submitted to MarkUs must include top-level notebook metadata named `markus`.
@@ -231,7 +259,7 @@ The notebook metadata `url` should point to your MarkUs server, for example:
 }
 ```
 
-If your MarkUs instance runs under a relative URL root, include that in the MarkUs URL metadata and make sure it ends with a slash, for example:
+If your MarkUs instance runs under a relative URL root, include that in the MarkUs URL metadata, for example:
 
 ```json
 {
@@ -354,6 +382,10 @@ Also confirm that the MarkUs URL in the notebook metadata is correct.
 ### Jupyter token error
 
 The extension uses `PageConfig.getToken()` to provide a Jupyter token to MarkUs. If the Jupyter environment uses cookie or OAuth authentication without a token, token-based fetching may not work without additional backend support.
+
+### "MarkUs origin is not trusted" / "No trusted MarkUs origins are configured"
+
+The notebook's `markus.url` doesn't match any origin in the [trusted MarkUs origins](#trusted-markus-origins) setting. This is expected if you're submitting to a MarkUs deployment other than the standard one this extension defaults to (or someone has overridden `trustedOrigins` to an empty list). Add the MarkUs origin (scheme + host + port, no path) to the `trustedOrigins` setting for `jupyterlab-markus-extension:plugin`, then retry.
 
 ### User not found in MarkUs
 

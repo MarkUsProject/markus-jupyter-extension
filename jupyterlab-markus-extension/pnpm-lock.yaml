@@ -25,6 +25,9 @@ importers:
       "@jupyterlab/rendermime-interfaces":
         specifier: ^3.8.0
         version: 3.14.3
+      "@jupyterlab/settingregistry":
+        specifier: ^4.0.0
+        version: 4.6.3(react@18.3.1)
       "@lumino/widgets":
         specifier: ^2.1.0
         version: 2.9.0
