@@ -15,7 +15,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "jupyterlab>=4",
     "jupyter-builder>=1.2.0"
@@ -25,14 +25,18 @@ dev = [
 source = "nodejs"
 
 [tool.hatch.build.targets.sdist]
-artifacts = ["jupyterlab-markus-extension/labextension"]
+artifacts = ["jupyterlab_markus_extension/labextension"]
 exclude = [".github", "binder"]
 
 [tool.hatch.build.targets.wheel]
-bypass-selection = true
+only-include = ["jupyterlab_markus_extension", "install.json"]
+
+[tool.hatch.build.targets.wheel.sources]
+"jupyterlab_markus_extension" = "jupyterlab_markus_extension"
+"install.json" = "install.json"
 
 [tool.hatch.build.targets.wheel.shared-data]
-"jupyterlab-markus-extension/labextension" = "share/jupyter/labextensions/jupyterlab-markus-extension"
+"jupyterlab_markus_extension/labextension" = "share/jupyter/labextensions/jupyterlab-markus-extension"
 "install.json" = "share/jupyter/labextensions/jupyterlab-markus-extension/install.json"
 
 [tool.hatch.build.hooks.jupyter-builder]
@@ -41,9 +45,9 @@ dependencies = [
 ]
 build-function = "hatch_jupyter_builder.npm_builder"
 ensured-targets = [
-    "jupyterlab-markus-extension/labextension/package.json"
+    "jupyterlab_markus_extension/labextension/package.json"
 ]
-skip-if-exists = ["jupyterlab-markus-extension/labextension/static/style.js"]
+skip-if-exists = ["jupyterlab_markus_extension/labextension/static/style.js"]
 
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
 build_cmd = "build:prod"
@@ -53,4 +57,4 @@ npm = ["pnpm"]
 build_cmd = "build:prod"
 npm = ["pnpm"]
 source_dir = "src"
-build_dir = "jupyterlab-markus-extension/labextension"
+build_dir = "jupyterlab_markus_extension/labextension"

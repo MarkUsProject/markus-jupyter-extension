@@ -27,7 +27,7 @@
     "build:lib:prod": "tsc",
     "clean": "pnpm run clean:lib",
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
-    "clean:all": "rimraf lib tsconfig.tsbuildinfo jupyterlab-markus-extension/labextension",
+    "clean:all": "rimraf lib tsconfig.tsbuildinfo jupyterlab_markus_extension/labextension",
     "watch": "tsc -w --sourceMap"
   },
   "dependencies": {
@@ -49,6 +49,6 @@
   },
   "jupyterlab": {
     "extension": true,
-    "outputDir": "jupyterlab-markus-extension/labextension"
+    "outputDir": "jupyterlab_markus_extension/labextension"
   }
 }

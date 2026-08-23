@@ -804,18 +804,19 @@ name = "jupyterlab-markus-extension"
 version = "0.1.0"
 source = { editable = "." }
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "jupyter-builder" },
     { name = "jupyterlab" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "jupyter-builder", marker = "extra == 'dev'", specifier = ">=1.2.0" },
-    { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4" },
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "jupyter-builder", specifier = ">=1.2.0" },
+    { name = "jupyterlab", specifier = ">=4" },
 ]
-provides-extras = ["dev"]
 
 [[package]]
 name = "jupyterlab-pygments"
