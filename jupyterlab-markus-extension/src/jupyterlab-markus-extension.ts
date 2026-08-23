@@ -16,6 +16,8 @@ import { ToolbarButton } from '@jupyterlab/apputils';
 // Import for the trusted-origins setting
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
+import { Widget } from '@lumino/widgets';
+
 // This code never actually runs under Node (tsconfig deliberately omits
 // Node's ambient types to keep the global namespace browser-only) --
 // `process.env.NODE_ENV` is a build-time string substituted in by the
@@ -326,6 +328,50 @@ async function reportSuccess(result: ISubmitResponse): Promise<void> {
   });
 }
 
+function createConfirmationBody(notebookName: string, markus: IMarkUsMetadata): Widget {
+  const courseLabel = markus.course ?? String(markus.course_id);
+  const assignmentLabel = markus.assignment ?? String(markus.assignment_id);
+
+  const node = document.createElement('div');
+
+  const intro = document.createElement('p');
+  intro.textContent = 'Submit this notebook to MarkUs?';
+  node.appendChild(intro);
+
+  const list = document.createElement('ul');
+  const items: Array<[string, string]> = [
+    ['Notebook', notebookName],
+    ['MarkUs URL', markus.url],
+    ['Course', courseLabel],
+    ['Assignment', assignmentLabel]
+  ];
+
+  for (const [label, value] of items) {
+    const item = document.createElement('li');
+
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}: `;
+    item.appendChild(strong);
+    item.appendChild(document.createTextNode(value));
+
+    list.appendChild(item);
+  }
+
+  node.appendChild(list);
+
+  return new Widget({ node });
+}
+
+async function confirmSubmission(notebookName: string, markus: IMarkUsMetadata): Promise<boolean> {
+  const result = await showDialog({
+    title: SUBMIT_LABEL,
+    body: createConfirmationBody(notebookName, markus),
+    buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Submit' })]
+  });
+
+  return result.button.accept;
+}
+
 // Report any errors
 async function reportError(error: unknown): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
@@ -348,6 +394,11 @@ async function submitToMarkUs(tracker: INotebookTracker, settings: ISettingRegis
 
     const markus = getMarkusMetadata(panel);
     assertTrustedOrigin(markus.url, getTrustedOrigins(settings));
+
+    if (!(await confirmSubmission(getNotebookName(panel), markus))) {
+      return;
+    }
+
     const payload = buildSubmitPayload(panel, markus);
 
     const result = await submitToServer(payload, markus);
