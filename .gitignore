@@ -159,5 +159,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# Node
+node_modules/
+labextension/
+*.tsbuildinfo
+
 # MarkUs API key files (may be used for testing)
 markus-api-key.txt

@@ -1,0 +1,5 @@
+{
+  "packageManager": "python",
+  "packageName": "jupyterlab-markus-extension",
+  "uninstallInstructions": "Remove the labextension files or reinstall the package."
+}
