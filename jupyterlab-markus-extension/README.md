@@ -305,6 +305,20 @@ Clean all generated files, including the labextension output:
 pnpm run clean:all
 ```
 
+## Running tests
+
+To run the test suite:
+
+```bash
+pnpm run test
+```
+
+To run a subset by name:
+
+```bash
+pnpm exec jest -t "normalizeBaseUrl"
+```
+
 ## Uninstall
 
 To remove the extension from a JupyterLab environment, delete the labextension symlink (or copy) that `jupyter-builder develop` created under the virtual environment's `share` directory:
