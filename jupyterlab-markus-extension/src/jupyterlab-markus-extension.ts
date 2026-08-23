@@ -91,7 +91,7 @@ interface ISubmitResponse {
 }
 
 // Checking to see if a notebook is open
-function getCurrentNotebookPanel(tracker: INotebookTracker): NotebookPanel {
+export function getCurrentNotebookPanel(tracker: INotebookTracker): NotebookPanel {
   const panel = tracker.currentWidget;
 
   if (!panel) {
@@ -102,7 +102,7 @@ function getCurrentNotebookPanel(tracker: INotebookTracker): NotebookPanel {
 }
 
 // Normalize MarkUs URL so it can safely be used as a base URL.
-function normalizeBaseUrl(value: string): string {
+export function normalizeBaseUrl(value: string): string {
   const trimmed = value.trim();
 
   if (!trimmed) {
@@ -144,7 +144,7 @@ const DEVELOPMENT_DEFAULT_TRUSTED_ORIGINS: string[] =
 
 // Read the trusted-origins setting, filtering out any malformed entries and
 // always including the development-only origins (a no-op in production).
-function getTrustedOrigins(settings: ISettingRegistry.ISettings): string[] {
+export function getTrustedOrigins(settings: ISettingRegistry.ISettings): string[] {
   const value = settings.get(TRUSTED_ORIGINS_KEY).composite;
   const configured = Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 
@@ -152,7 +152,7 @@ function getTrustedOrigins(settings: ISettingRegistry.ISettings): string[] {
 }
 
 // Reject submission targets that are not explicitly trusted.
-function assertTrustedOrigin(url: string, trustedOrigins: string[]): void {
+export function assertTrustedOrigin(url: string, trustedOrigins: string[]): void {
   const origin = new URL(url).origin;
 
   if (trustedOrigins.length === 0) {
@@ -171,7 +171,7 @@ function assertTrustedOrigin(url: string, trustedOrigins: string[]): void {
 }
 
 // Get notebook name from JupyterLab context.
-function getNotebookName(panel: NotebookPanel): string {
+export function getNotebookName(panel: NotebookPanel): string {
   const notebookName = panel.context.contentsModel?.name || panel.context.path.split('/').pop();
 
   if (!notebookName) {
@@ -182,7 +182,7 @@ function getNotebookName(panel: NotebookPanel): string {
 }
 
 // Extracting the MarkUs metadata from the notebook
-function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
+export function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
   const metadata = panel.content.model?.metadata as any;
   const rawMetadata = metadata?.get ? metadata.get('markus') : metadata?.markus;
 
@@ -238,7 +238,7 @@ function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
 }
 
 // Compiling the submission payload
-function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata): ISubmitPayload {
+export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata): ISubmitPayload {
   const notebookPath = panel.context.path;
 
   if (!notebookPath) {
