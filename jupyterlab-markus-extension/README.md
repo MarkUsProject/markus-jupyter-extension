@@ -24,7 +24,7 @@ This extension requires:
 
 ## Install the extension for development
 
-From the root of this extension project, sync the Python environment (this pulls in JupyterLab and the build tooling, declared as a `dev` dependency group, which `uv sync` includes by default):
+From the root of this extension project, sync the Python environment (this pulls in JupyterLab, JpuyterHub, and the build tooling, declared as a `dev` dependency group, which `uv sync` includes by default):
 
 ```bash
 uv sync
@@ -62,13 +62,33 @@ uv run jupyter-builder develop . --overwrite
 > uv run python -c "from jupyter_builder.federated_extensions import develop_labextension_py; develop_labextension_py('.', sys_prefix=True, overwrite=True, symlink=False)"
 > ```
 
-In another terminal, run JupyterLab:
+In another terminal, run JupyterHub:
 
 ```bash
-uv run jupyter lab
+uv run jupyterhub
 ```
 
-If JupyterLab is already running, restart it after rebuilding the extension.
+`jupyterhub_config.py` is written to work unmodified on Windows, macOS, and Linux (all already handled, no action needed — noted here in case any of this ever needs adjusting):
+
+> - JupyterHub launches its proxy (`configurable-http-proxy`, a Node package) via Python's subprocess machinery. On Windows this can't directly execute the `.CMD` wrapper pnpm generates for it (no shell involved to interpret it); on macOS/Linux pnpm generates a plain executable shebang script instead, so there's nothing to fix there, but pointing `c.ConfigurableHTTPProxy.command` straight at the real Node script (`node <script.js>`) works identically either way, so it's done unconditionally rather than branching per OS.
+> - The default `LocalProcessSpawner` assumes a POSIX multi-user host: it looks up each user's home directory via the stdlib `pwd` module and drops subprocess privileges via a `preexec_fn` passed to `Popen`. `pwd` doesn't exist on Windows at all, and Windows' process-creation API has no fork/preexec_fn equivalent (`Popen` raises `ValueError` for a non-`None` `preexec_fn` there, regardless of what it does) — so this is a real requirement on Windows, not optional. A small `PortableLocalProcessSpawner` subclass skips both unconditionally on every platform instead: there's no real per-user OS account to drop privileges to in this single-desktop, `DummyAuthenticator`-based setup on any OS anyway, so there's nothing lost by not branching.
+> - `Spawner.env_keep` defaults to a near-empty allowlist (deliberately, so secrets like `CONFIGPROXY_AUTH_TOKEN` don't leak into spawned servers) — but that also strips variables the OS itself needs for basic process behavior: `SystemRoot` on Windows (without it, the spawned single-user server crashes on startup with `OSError: [WinError 10106] The requested service provider could not be loaded or initialized`) and `HOME` on macOS/Linux (relied on pervasively — shell/tooling config resolution, `~/.jupyter`, `~/.local`, etc.). `env_keep` only copies a variable if it's actually present in the current process's own environment, so listing every platform's essentials together in one list is safe — each OS just ignores the names that don't apply to it.
+
+Then open <http://127.0.0.1:8888/hub/login> and log in with any username and password.
+
+If JupyterHub is already running, restart it after rebuilding the extension.
+
+## Configuring the username
+
+With `DummyAuthenticator`, there's no separate place to configure a username: whatever you type into the `/hub/login` form's username field _is_ the username — nothing needs to be pre-registered. Logging in with a different username creates/logs into a different Hub user.
+
+To skip the browser entirely — e.g. to script a test directly against a submission endpoint — mint a token for a specific username from the command line instead:
+
+```bash
+uv run jupyterhub token <username>
+```
+
+This creates that user (if they don't already exist) and prints a raw API token for them, without going through `/hub/login` at all.
 
 ## Verify the extension is installed
 
@@ -230,11 +250,11 @@ jupyter_server:
 A typical local setup is:
 
 1. Start MarkUs.
-2. Start JupyterLab.
+2. Start JupyterHub (`uv run jupyterhub`) and log in at `http://127.0.0.1:8888/hub/login`.
 3. Open a notebook.
 4. Add the required `markus` metadata.
 5. Click **Submit to MarkUs** in the notebook toolbar.
-6. Review the confirmation dialog, which shows the URL, course, and assignment the notebook is about to be submitted to, and click **Submit** to proceed.
+6. Review the confirmation dialog, which shows the notebook, username, MarkUs URL, course, and assignment the notebook is about to be submitted with/to, and click **Submit** to proceed.
 
 Example:
 
@@ -244,8 +264,8 @@ bin/rails server
 ```
 
 ```bash
-# Terminal 2: JupyterLab
-uv run jupyter lab
+# Terminal 2: JupyterHub
+uv run jupyterhub
 ```
 
 The notebook metadata `url` should point to your MarkUs server, for example:
@@ -354,7 +374,9 @@ If it's listed but stale, rebuild the extension:
 uv run jupyter-builder build --development True .
 ```
 
-Then restart JupyterLab.
+Then restart JupyterHub.
+
+If `jupyterlab-markus-extension` shows `enabled ok` but the button still doesn't appear, this is likely intentional: the extension checks for a real JupyterHub identity on activation and hides its button entirely when there isn't one (see [Requirements](#requirements)). Check the browser's devtools console for a warning starting with `[Submit to MarkUs] No JupyterHub identity found`. If you see it, you're not actually running under Hub — make sure you started `uv run jupyterhub` (not plain `jupyter lab`) and are logged in at `http://127.0.0.1:8888/hub/login`, then open the notebook from _that_ session rather than a separately-started one.
 
 ### Missing notebook metadata error
 

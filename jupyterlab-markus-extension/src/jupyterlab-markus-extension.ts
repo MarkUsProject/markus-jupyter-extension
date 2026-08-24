@@ -338,10 +338,13 @@ function createConfirmationBody(notebookName: string, markus: IMarkUsMetadata): 
   intro.textContent = 'Submit this notebook to MarkUs?';
   node.appendChild(intro);
 
+  const username = PageConfig.getOption('hubUser') || '(not available)';
+
   const list = document.createElement('ul');
   const items: Array<[string, string]> = [
     ['Notebook', notebookName],
     ['MarkUs URL', markus.url],
+    ['Username', username],
     ['Course', courseLabel],
     ['Assignment', assignmentLabel]
   ];
@@ -441,6 +444,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
   ) => {
     console.log('JupyterLab extension jupyterlab-markus-extension is activated.');
 
+    // Detect presence of JupyterHub identity, which is required for this extension.
+    const hasHubIdentity = Boolean(PageConfig.getOption('hubUser'));
+
+    if (!hasHubIdentity) {
+      console.warn(`[${SUBMIT_LABEL}] No JupyterHub identity found. The "Submit to MarkUs" button will not be shown.`);
+    }
+
     const settings = await settingRegistry.load(PLUGIN_ID);
 
     app.commands.addCommand(COMMAND_ID, {
@@ -451,19 +461,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
-    if (palette) {
+    if (palette && hasHubIdentity) {
       palette.addItem({
         command: COMMAND_ID,
         category: 'MarkUs'
       });
     }
 
-    tracker.widgetAdded.connect((_sender, panel) => {
-      addToolbarButton(panel, app);
-    });
+    if (hasHubIdentity) {
+      tracker.widgetAdded.connect((_sender, panel) => {
+        addToolbarButton(panel, app);
+      });
 
-    if (tracker.currentWidget) {
-      addToolbarButton(tracker.currentWidget, app);
+      if (tracker.currentWidget) {
+        addToolbarButton(tracker.currentWidget, app);
+      }
     }
   }
 };
