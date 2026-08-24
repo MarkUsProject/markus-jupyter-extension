@@ -24,22 +24,22 @@ This extension requires:
 
 ## Install the extension for development
 
-From the root of this extension project, sync the Python environment (this pulls in JupyterLab, JpuyterHub, and the build tooling, declared as a `dev` dependency group, which `uv sync` includes by default):
-
-```bash
-uv sync
-```
-
-Then install the JavaScript dependencies:
+From the root of this extension project, install the JavaScript dependencies:
 
 ```bash
 pnpm install
 ```
 
+Then sync the Python environment (this pulls in JupyterLab, JpuyterHub, and the build tooling, declared as a `dev` dependency group, which `uv sync` includes by default):
+
+```bash
+uv sync
+```
+
 Build the extension:
 
 ```bash
-uv run jupyter-builder build --development True .
+pnpm run build
 ```
 
 If you are actively developing the TypeScript source, you can watch and recompile it on save in one terminal:

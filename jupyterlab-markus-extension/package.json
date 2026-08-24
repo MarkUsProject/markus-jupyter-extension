@@ -21,8 +21,8 @@
   "scripts": {
     "build": "pnpm run build:lib && pnpm run build:labextension:dev",
     "build:prod": "pnpm run clean && pnpm run build:lib:prod && pnpm run build:labextension",
-    "build:labextension": "jupyter-builder build .",
-    "build:labextension:dev": "jupyter-builder build --development True .",
+    "build:labextension": "uv run --no-sync jupyter-builder build .",
+    "build:labextension:dev": "uv run --no-sync jupyter-builder build --development True .",
     "build:lib": "tsc --sourceMap",
     "build:lib:prod": "tsc",
     "clean": "pnpm run clean:lib",
