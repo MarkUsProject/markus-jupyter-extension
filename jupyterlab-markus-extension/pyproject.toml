@@ -18,7 +18,8 @@ dependencies = []
 [dependency-groups]
 dev = [
     "jupyterlab>=4",
-    "jupyter-builder>=1.2.0"
+    "jupyter-builder>=1.2.0",
+    "jupyterhub>=5"
 ]
 
 [tool.hatch.version]
@@ -54,7 +55,10 @@ build_cmd = "build:prod"
 npm = ["pnpm"]
 
 [tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
-build_cmd = "build:prod"
+build_cmd = "build"
 npm = ["pnpm"]
 source_dir = "src"
 build_dir = "jupyterlab_markus_extension/labextension"
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build_hooks.py"

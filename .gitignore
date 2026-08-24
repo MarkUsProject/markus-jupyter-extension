@@ -164,5 +164,11 @@ node_modules/
 labextension/
 *.tsbuildinfo
 
+# Local JupyterHub dev instance (see jupyterhub_config.py) -- runtime
+# state/secrets, not the config itself
+jupyterhub.sqlite
+jupyterhub_cookie_secret
+jupyterhub-proxy.pid
+
 # MarkUs API key files (may be used for testing)
 markus-api-key.txt
