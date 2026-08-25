@@ -146,14 +146,13 @@ The metadata must include:
 
 The meaning of each field is:
 
-| Field              | Meaning                                    |
-| ------------------ | ------------------------------------------ |
-| `url`              | Base URL of the MarkUs server              |
-| `course_id`        | MarkUs `Course.id`                         |
-| `course`           | MarkUs `Course.name`                       |
-| `assignment_id`    | MarkUs `Assignment.id`                     |
-| `assignment`       | MarkUs assignment `short_identifier`       |
-| `destination_path` | Optional submitted filename/path in MarkUs |
+| Field           | Meaning                              |
+| --------------- | ------------------------------------- |
+| `url`           | Base URL of the MarkUs server         |
+| `course_id`     | MarkUs `Course.id`                    |
+| `course`        | MarkUs `Course.name`                  |
+| `assignment_id` | MarkUs `Assignment.id`                |
+| `assignment`    | MarkUs assignment `short_identifier`  |
 
 Use either the ID form or the name/identifier form, but not both for the same item.
 
@@ -164,8 +163,7 @@ Use either the ID form or the name/identifier form, but not both for the same it
   "markus": {
     "url": "http://localhost:3000/",
     "course_id": 1,
-    "assignment_id": 2,
-    "destination_path": "assignment1.ipynb"
+    "assignment_id": 2
   }
 }
 ```
@@ -177,13 +175,12 @@ Use either the ID form or the name/identifier form, but not both for the same it
   "markus": {
     "url": "http://localhost:3000/",
     "course": "csc108",
-    "assignment": "a1",
-    "destination_path": "assignment1.ipynb"
+    "assignment": "a1"
   }
 }
 ```
 
-If `destination_path` is not provided, the extension sends the current notebook name as the submitted filename.
+The submitted filename in MarkUs is always the current notebook's filename.
 
 ## MarkUs backend route
 

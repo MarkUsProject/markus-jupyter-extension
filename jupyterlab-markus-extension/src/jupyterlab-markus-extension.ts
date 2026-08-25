@@ -47,15 +47,11 @@ interface IMarkUsMetadata {
 
   // assignment refers to Assignment.short_identifier
   assignment?: string;
-
-  destination_path?: string;
 }
 
 // Creating the Payload space
 interface ISubmitPayload {
   notebook_path: string;
-  notebook_name: string;
-  destination_path?: string;
 
   course_id?: number | string;
   course?: string;
@@ -64,7 +60,6 @@ interface ISubmitPayload {
 
   jupyter: {
     base_url: string;
-    origin: string;
     token: string;
   };
 }
@@ -76,19 +71,10 @@ interface ISubmitResponse {
   submitted_file?: string;
   markus_target?: {
     course_id?: number | string;
+    course?: string;
     assignment_id?: number | string;
     assignment?: string;
-    repository_folder?: string;
-    grouping_id?: number | string;
-    group_id?: number | string;
-    student_role_id?: number | string;
     markus_user_name?: string;
-  };
-  fetched_file?: {
-    name?: string;
-    path?: string;
-    type?: string;
-    format?: string;
   };
 }
 
@@ -247,9 +233,7 @@ export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata
     throw new Error('Could not determine notebook path.');
   }
 
-  const notebookName = getNotebookName(panel);
   const jupyterBaseUrl = PageConfig.getBaseUrl();
-  const jupyterOrigin = window.location.origin;
   const jupyterToken = PageConfig.getToken();
 
   if (!jupyterToken) {
@@ -260,8 +244,6 @@ export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata
 
   return {
     notebook_path: notebookPath,
-    notebook_name: notebookName,
-    destination_path: markus.destination_path,
 
     course_id: markus.course_id,
     course: markus.course,
@@ -270,7 +252,6 @@ export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata
 
     jupyter: {
       base_url: jupyterBaseUrl,
-      origin: jupyterOrigin,
       token: jupyterToken
     }
   };
