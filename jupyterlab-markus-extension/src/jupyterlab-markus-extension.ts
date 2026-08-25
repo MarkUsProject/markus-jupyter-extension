@@ -18,6 +18,14 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 import { Widget } from '@lumino/widgets';
 
+import {
+  MarkUsServerError,
+  extractErrorMessage,
+  getJupyterCredentials,
+  getOrCreateSession,
+  invalidateSession
+} from './session';
+
 // This code never actually runs under Node (tsconfig deliberately omits
 // Node's ambient types to keep the global namespace browser-only) --
 // `process.env.NODE_ENV` is a build-time string substituted in by the
@@ -33,7 +41,7 @@ const PLUGIN_ID = 'jupyterlab-markus-extension:plugin';
 const TRUSTED_ORIGINS_KEY = 'trustedOrigins';
 
 // Creating the Metadata space
-interface IMarkUsMetadata {
+export interface IMarkUsMetadata {
   url: string;
 
   // course_id refers to Course.id
@@ -62,6 +70,8 @@ interface ISubmitPayload {
     base_url: string;
     token: string;
   };
+
+  session_token: string;
 }
 
 // Creating the submission response space
@@ -226,20 +236,15 @@ export function getMarkusMetadata(panel: NotebookPanel): IMarkUsMetadata {
 }
 
 // Compiling the submission payload
-export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata): ISubmitPayload {
+export function buildSubmitPayload(
+  panel: NotebookPanel,
+  markus: IMarkUsMetadata,
+  sessionToken: string
+): ISubmitPayload {
   const notebookPath = panel.context.path;
 
   if (!notebookPath) {
     throw new Error('Could not determine notebook path.');
-  }
-
-  const jupyterBaseUrl = PageConfig.getBaseUrl();
-  const jupyterToken = PageConfig.getToken();
-
-  if (!jupyterToken) {
-    throw new Error(
-      'No Jupyter token available. This environment may be using cookie/OAuth authentication. Token-based pull may not work.'
-    );
   }
 
   return {
@@ -250,10 +255,9 @@ export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsMetadata
     assignment_id: markus.assignment_id,
     assignment: markus.assignment,
 
-    jupyter: {
-      base_url: jupyterBaseUrl,
-      token: jupyterToken
-    }
+    jupyter: getJupyterCredentials(),
+
+    session_token: sessionToken
   };
 }
 
@@ -273,7 +277,10 @@ async function submitToServer(payload: ISubmitPayload, markus: IMarkUsMetadata):
   const text = await response.text();
 
   if (!response.ok) {
-    throw new Error(`MarkUs server error ${response.status}: ${text}`);
+    throw new MarkUsServerError(
+      `MarkUs server error ${response.status}: ${extractErrorMessage(response.status, text)}`,
+      response.status
+    );
   }
 
   try {
@@ -283,6 +290,25 @@ async function submitToServer(payload: ISubmitPayload, markus: IMarkUsMetadata):
       status: 'ok',
       message: text
     };
+  }
+}
+
+// Submits with a valid session token, re-authenticating and retrying exactly
+// once if the session was rejected (expired/tampered/wrong origin/etc).
+export async function submitWithSessionRetry(panel: NotebookPanel, markus: IMarkUsMetadata): Promise<ISubmitResponse> {
+  const sessionToken = await getOrCreateSession(markus);
+
+  try {
+    const payload = buildSubmitPayload(panel, markus, sessionToken);
+    return await submitToServer(payload, markus);
+  } catch (error) {
+    if (!(error instanceof MarkUsServerError) || error.status !== 401) {
+      throw error;
+    }
+
+    invalidateSession(markus);
+    const freshSessionToken = await getOrCreateSession(markus);
+    return await submitToServer(buildSubmitPayload(panel, markus, freshSessionToken), markus);
   }
 }
 
@@ -383,9 +409,7 @@ async function submitToMarkUs(tracker: INotebookTracker, settings: ISettingRegis
       return;
     }
 
-    const payload = buildSubmitPayload(panel, markus);
-
-    const result = await submitToServer(payload, markus);
+    const result = await submitWithSessionRetry(panel, markus);
 
     await reportSuccess(result);
   } catch (error) {
