@@ -239,8 +239,7 @@ describe('getMarkusMetadata', () => {
   const validMarkus = {
     url: 'http://localhost:3000',
     course_id: 1,
-    assignment_id: 2,
-    destination_path: 'assignment1.ipynb'
+    assignment_id: 2
   };
 
   it('throws when the "markus" key is missing', () => {
@@ -305,8 +304,7 @@ describe('getMarkusMetadata', () => {
     expect(getMarkusMetadata(panel)).toEqual({
       url: 'http://localhost:3000/',
       course_id: 1,
-      assignment_id: 2,
-      destination_path: 'assignment1.ipynb'
+      assignment_id: 2
     });
   });
 
@@ -325,8 +323,7 @@ describe('buildSubmitPayload', () => {
   const markus = {
     url: 'http://localhost:3000/',
     course_id: 1,
-    assignment_id: 2,
-    destination_path: 'assignment1.ipynb'
+    assignment_id: 2
   };
 
   beforeEach(() => {
@@ -351,15 +348,12 @@ describe('buildSubmitPayload', () => {
 
     expect(buildSubmitPayload(panel, markus)).toEqual({
       notebook_path: 'nested/demo.ipynb',
-      notebook_name: 'demo.ipynb',
-      destination_path: 'assignment1.ipynb',
       course_id: 1,
       course: undefined,
       assignment_id: 2,
       assignment: undefined,
       jupyter: {
         base_url: 'http://localhost:8888/',
-        origin: window.location.origin,
         token: 'test-token'
       }
     });
