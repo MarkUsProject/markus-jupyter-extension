@@ -42,8 +42,10 @@ import {
   getNotebookName,
   getTrustedOrigins,
   normalizeBaseUrl,
-  parseMarkusId
+  parseMarkusId,
+  submitWithSessionRetry
 } from '../jupyterlab-markus-extension';
+import { invalidateSession } from '../session';
 
 const mockGetBaseUrl = PageConfig.getBaseUrl as jest.Mock;
 const mockGetToken = PageConfig.getToken as jest.Mock;
@@ -333,20 +335,20 @@ describe('buildSubmitPayload', () => {
 
   it('throws when the notebook path is unavailable', () => {
     const panel = makePanel({ path: '' });
-    expect(() => buildSubmitPayload(panel, markus)).toThrow('Could not determine notebook path.');
+    expect(() => buildSubmitPayload(panel, markus, 'session-token')).toThrow('Could not determine notebook path.');
   });
 
   it('throws when no Jupyter token is available', () => {
     mockGetToken.mockReturnValue('');
     const panel = makePanel({ path: 'demo.ipynb', contentsModelName: 'demo.ipynb' });
 
-    expect(() => buildSubmitPayload(panel, markus)).toThrow('No Jupyter token available.');
+    expect(() => buildSubmitPayload(panel, markus, 'session-token')).toThrow('No Jupyter token available.');
   });
 
-  it('assembles the full payload from the panel, markus metadata, and PageConfig', () => {
+  it('assembles the full payload from the panel, markus metadata, PageConfig, and session token', () => {
     const panel = makePanel({ path: 'nested/demo.ipynb', contentsModelName: 'demo.ipynb' });
 
-    expect(buildSubmitPayload(panel, markus)).toEqual({
+    expect(buildSubmitPayload(panel, markus, 'session-token')).toEqual({
       notebook_path: 'nested/demo.ipynb',
       course_id: 1,
       course: undefined,
@@ -355,7 +357,114 @@ describe('buildSubmitPayload', () => {
       jupyter: {
         base_url: 'http://localhost:8888/',
         token: 'test-token'
-      }
+      },
+      session_token: 'session-token'
     });
+  });
+});
+
+describe('submitWithSessionRetry', () => {
+  const markus = {
+    url: 'http://retry.example.com/',
+    course_id: 1,
+    assignment_id: 2
+  };
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
+    mockGetToken.mockReset().mockReturnValue('test-token');
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+    invalidateSession(markus);
+  });
+
+  function authResponse(sessionToken: string): { ok: true; status: 200; text: () => Promise<string> } {
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          status: 'success',
+          session_token: sessionToken,
+          expires_at: new Date(Date.now() + 60_000).toISOString()
+        })
+    };
+  }
+
+  function submitSuccess(): { ok: true; status: 200; text: () => Promise<string> } {
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ status: 'success', submitted_file: 'demo.ipynb' })
+    };
+  }
+
+  function submitUnauthorized(): { ok: false; status: 401; text: () => Promise<string> } {
+    return {
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ status: 'error', message: 'Session expired.', error_class: 'IdentityError' })
+    };
+  }
+
+  it('authenticates then submits on the happy path', async () => {
+    const panel = makePanel({ path: 'demo.ipynb', contentsModelName: 'demo.ipynb' });
+    mockFetch
+      .mockResolvedValueOnce(authResponse('sess-1'))
+      .mockResolvedValueOnce(submitSuccess());
+
+    const result = await submitWithSessionRetry(panel, markus);
+
+    expect(result.submitted_file).toBe('demo.ipynb');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-authenticates and retries exactly once on a 401, succeeding the second time', async () => {
+    const panel = makePanel({ path: 'demo.ipynb', contentsModelName: 'demo.ipynb' });
+    mockFetch
+      .mockResolvedValueOnce(authResponse('sess-1'))
+      .mockResolvedValueOnce(submitUnauthorized())
+      .mockResolvedValueOnce(authResponse('sess-2'))
+      .mockResolvedValueOnce(submitSuccess());
+
+    const result = await submitWithSessionRetry(panel, markus);
+
+    expect(result.submitted_file).toBe('demo.ipynb');
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+
+    const secondSubmitBody = JSON.parse((mockFetch.mock.calls[3][1] as RequestInit).body as string);
+    expect(secondSubmitBody.session_token).toBe('sess-2');
+  });
+
+  it('propagates the error if the retried submit also fails with a 401', async () => {
+    const panel = makePanel({ path: 'demo.ipynb', contentsModelName: 'demo.ipynb' });
+    mockFetch
+      .mockResolvedValueOnce(authResponse('sess-1'))
+      .mockResolvedValueOnce(submitUnauthorized())
+      .mockResolvedValueOnce(authResponse('sess-2'))
+      .mockResolvedValueOnce(submitUnauthorized());
+
+    await expect(submitWithSessionRetry(panel, markus)).rejects.toMatchObject({
+      name: 'MarkUsServerError',
+      status: 401
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not retry on a non-401 failure', async () => {
+    const panel = makePanel({ path: 'demo.ipynb', contentsModelName: 'demo.ipynb' });
+    mockFetch.mockResolvedValueOnce(authResponse('sess-1')).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ status: 'error', message: 'Not a student in this course.' })
+    });
+
+    await expect(submitWithSessionRetry(panel, markus)).rejects.toMatchObject({
+      name: 'MarkUsServerError',
+      status: 403
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });

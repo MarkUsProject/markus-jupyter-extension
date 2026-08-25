@@ -1,0 +1,170 @@
+// See the top of jupyterlab-markus-extension.test.ts for why PageConfig is
+// mocked rather than imported for real.
+jest.mock('@jupyterlab/coreutils', () => ({
+  PageConfig: {
+    getBaseUrl: jest.fn(),
+    getToken: jest.fn()
+  }
+}));
+
+import { PageConfig } from '@jupyterlab/coreutils';
+
+import { authenticateWithMarkUs, getOrCreateSession, invalidateSession, MarkUsServerError } from '../session';
+
+const mockGetBaseUrl = PageConfig.getBaseUrl as jest.Mock;
+const mockGetToken = PageConfig.getToken as jest.Mock;
+
+describe('authenticateWithMarkUs', () => {
+  const markus = {
+    url: 'http://localhost:3000/',
+    course_id: 1,
+    assignment_id: 2
+  };
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
+    mockGetToken.mockReset().mockReturnValue('test-token');
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+  });
+
+  it('posts the jupyter base_url/token and returns the parsed session response', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          status: 'success',
+          session_token: 'sess-abc',
+          expires_at: '2026-08-25T12:15:00Z',
+          markus_user_name: 'c9user'
+        })
+    });
+
+    const result = await authenticateWithMarkUs(markus);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3000/jupyter/authenticate',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          jupyter: { base_url: 'http://localhost:8888/', token: 'test-token' }
+        })
+      })
+    );
+    expect(result).toEqual({
+      status: 'success',
+      session_token: 'sess-abc',
+      expires_at: '2026-08-25T12:15:00Z',
+      markus_user_name: 'c9user'
+    });
+  });
+
+  it('throws a MarkUsServerError carrying the status and server message on failure', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () =>
+        JSON.stringify({ status: 'error', message: 'Invalid Jupyter token.', error_class: 'IdentityError' })
+    });
+
+    let caught: unknown;
+    try {
+      await authenticateWithMarkUs(markus);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(MarkUsServerError);
+    expect((caught as MarkUsServerError).status).toBe(401);
+    expect((caught as MarkUsServerError).message).toContain('Invalid Jupyter token.');
+  });
+
+  it('throws when no Jupyter token is available', async () => {
+    mockGetToken.mockReturnValue('');
+    await expect(authenticateWithMarkUs(markus)).rejects.toThrow('No Jupyter token available.');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('getOrCreateSession / invalidateSession', () => {
+  // A distinct origin per describe block keeps the module-level session
+  // cache from leaking state between suites.
+  const markus = {
+    url: 'http://session-cache.example.com/',
+    course_id: 1,
+    assignment_id: 2
+  };
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
+    mockGetToken.mockReset().mockReturnValue('test-token');
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+    invalidateSession(markus);
+  });
+
+  function mockAuthSuccess(sessionToken: string, expiresAt: string): void {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ status: 'success', session_token: sessionToken, expires_at: expiresAt })
+    });
+  }
+
+  it('authenticates once and reuses the cached token within its TTL', async () => {
+    mockAuthSuccess('sess-1', new Date(Date.now() + 60_000).toISOString());
+
+    const first = await getOrCreateSession(markus);
+    const second = await getOrCreateSession(markus);
+
+    expect(first).toBe('sess-1');
+    expect(second).toBe('sess-1');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-authenticates once the cached token is within the expiry safety margin', async () => {
+    mockAuthSuccess('sess-1', new Date(Date.now() + 5_000).toISOString());
+    mockAuthSuccess('sess-2', new Date(Date.now() + 60_000).toISOString());
+
+    const first = await getOrCreateSession(markus);
+    const second = await getOrCreateSession(markus);
+
+    expect(first).toBe('sess-1');
+    expect(second).toBe('sess-2');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-authenticates after invalidateSession is called', async () => {
+    mockAuthSuccess('sess-1', new Date(Date.now() + 60_000).toISOString());
+    mockAuthSuccess('sess-2', new Date(Date.now() + 60_000).toISOString());
+
+    const first = await getOrCreateSession(markus);
+    invalidateSession(markus);
+    const second = await getOrCreateSession(markus);
+
+    expect(first).toBe('sess-1');
+    expect(second).toBe('sess-2');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws when the response is missing session_token or expires_at', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ status: 'success' })
+    });
+
+    await expect(getOrCreateSession(markus)).rejects.toThrow(/missing "session_token" or "expires_at"/);
+  });
+
+  it('throws when expires_at cannot be parsed', async () => {
+    mockAuthSuccess('sess-1', 'not-a-date');
+
+    await expect(getOrCreateSession(markus)).rejects.toThrow(/invalid "expires_at" value/);
+  });
+});
