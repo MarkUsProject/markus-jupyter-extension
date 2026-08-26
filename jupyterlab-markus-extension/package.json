@@ -29,7 +29,8 @@
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
     "clean:all": "rimraf lib tsconfig.tsbuildinfo jupyterlab_markus_extension/labextension",
     "watch": "tsc -w --sourceMap",
-    "test": "jest"
+    "test": "jest",
+    "start": "uv run --no-sync jupyterhub"
   },
   "dependencies": {
     "@jupyterlab/application": "^4.0.0",

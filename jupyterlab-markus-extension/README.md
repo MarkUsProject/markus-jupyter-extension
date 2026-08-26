@@ -65,7 +65,7 @@ uv run jupyter-builder develop . --overwrite
 In another terminal, run JupyterHub:
 
 ```bash
-uv run jupyterhub
+pnpm start
 ```
 
 `jupyterhub_config.py` is written to work unmodified on Windows, macOS, and Linux (all already handled, no action needed — noted here in case any of this ever needs adjusting):
@@ -147,12 +147,12 @@ The metadata must include:
 The meaning of each field is:
 
 | Field           | Meaning                              |
-| --------------- | ------------------------------------- |
-| `url`           | Base URL of the MarkUs server         |
-| `course_id`     | MarkUs `Course.id`                    |
-| `course`        | MarkUs `Course.name`                  |
-| `assignment_id` | MarkUs `Assignment.id`                |
-| `assignment`    | MarkUs assignment `short_identifier`  |
+| --------------- | ------------------------------------ |
+| `url`           | Base URL of the MarkUs server        |
+| `course_id`     | MarkUs `Course.id`                   |
+| `course`        | MarkUs `Course.name`                 |
+| `assignment_id` | MarkUs `Assignment.id`               |
+| `assignment`    | MarkUs assignment `short_identifier` |
 
 Use either the ID form or the name/identifier form, but not both for the same item.
 
@@ -247,7 +247,7 @@ jupyter_server:
 A typical local setup is:
 
 1. Start MarkUs.
-2. Start JupyterHub (`uv run jupyterhub`) and log in at `http://127.0.0.1:8888/hub/login`.
+2. Start JupyterHub (`pnpm start`) and log in at `http://127.0.0.1:8888/hub/login`.
 3. Open a notebook.
 4. Add the required `markus` metadata.
 5. Click **Submit to MarkUs** in the notebook toolbar.
@@ -262,7 +262,7 @@ bin/rails server
 
 ```bash
 # Terminal 2: JupyterHub
-uv run jupyterhub
+pnpm start
 ```
 
 The notebook metadata `url` should point to your MarkUs server, for example:
@@ -373,7 +373,7 @@ uv run jupyter-builder build --development True .
 
 Then restart JupyterHub.
 
-If `jupyterlab-markus-extension` shows `enabled ok` but the button still doesn't appear, this is likely intentional: the extension checks for a real JupyterHub identity on activation and hides its button entirely when there isn't one (see [Requirements](#requirements)). Check the browser's devtools console for a warning starting with `[Submit to MarkUs] No JupyterHub identity found`. If you see it, you're not actually running under Hub — make sure you started `uv run jupyterhub` (not plain `jupyter lab`) and are logged in at `http://127.0.0.1:8888/hub/login`, then open the notebook from _that_ session rather than a separately-started one.
+If `jupyterlab-markus-extension` shows `enabled ok` but the button still doesn't appear, this is likely intentional: the extension checks for a real JupyterHub identity on activation and hides its button entirely when there isn't one (see [Requirements](#requirements)). Check the browser's devtools console for a warning starting with `[Submit to MarkUs] No JupyterHub identity found`. If you see it, you're not actually running under Hub — make sure you started `pnpm start` and are logged in at `http://127.0.0.1:8888/hub/login`, then open the notebook from _that_ session rather than a separately-started one.
 
 ### Missing notebook metadata error
 
