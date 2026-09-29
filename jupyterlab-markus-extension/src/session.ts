@@ -3,10 +3,7 @@ import { PageConfig } from '@jupyterlab/coreutils';
 // An error thrown by a MarkUs HTTP call, carrying the response status so
 // callers can distinguish retryable failures (401) from everything else.
 export class MarkUsServerError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number
-  ) {
+  constructor(message: string, public readonly status: number) {
     super(message);
     this.name = 'MarkUsServerError';
   }
@@ -38,10 +35,7 @@ export interface IMarkUsCourse {
 export interface IAssignmentsResponse {
   status: string;
   courses: IMarkUsCourse[];
-  reason?:
-      | 'no_enrollment'
-      | 'no_available_assignments'
-      | 'api_submission_disabled';
+  reason?: 'no_enrollment' | 'no_available_assignments' | 'api_submission_disabled';
   message?: string;
 }
 
@@ -75,9 +69,7 @@ export function extractErrorMessage(status: number, text: string): string {
 }
 
 // Authenticate with the MarkUs server to obtain a short-lived session token.
-export async function authenticateWithMarkUs(
-  markusUrl: string
-): Promise<ISessionResponse> {
+export async function authenticateWithMarkUs(markusUrl: string): Promise<ISessionResponse> {
   const authUrl = new URL('jupyter/authenticate', markusUrl).toString();
 
   const response = await fetch(authUrl, {
@@ -93,10 +85,7 @@ export async function authenticateWithMarkUs(
 
   if (!response.ok) {
     throw new MarkUsServerError(
-      `MarkUs server error ${response.status}: ${extractErrorMessage(
-        response.status,
-        text
-      )}`,
+      `MarkUs server error ${response.status}: ${extractErrorMessage(response.status, text)}`,
       response.status
     );
   }
@@ -132,33 +121,24 @@ export function invalidateSession(markusUrl: string): void {
 
 // Return a live session token for this MarkUs base URL, reusing a cached one
 // if it isn't close to expiring, otherwise authenticating for a fresh one.
-export async function getOrCreateSession(
-  markusUrl: string
-): Promise<string> {
+export async function getOrCreateSession(markusUrl: string): Promise<string> {
   const cacheKey = getMarkusCacheKey(markusUrl);
   const cached = sessionCache.get(cacheKey);
 
-  if (
-    cached &&
-    cached.expiresAt - SESSION_EXPIRY_SAFETY_MARGIN_MS > Date.now()
-  ) {
+  if (cached && cached.expiresAt - SESSION_EXPIRY_SAFETY_MARGIN_MS > Date.now()) {
     return cached.sessionToken;
   }
 
   const response = await authenticateWithMarkUs(markusUrl);
 
   if (!response.session_token || !response.expires_at) {
-    throw new Error(
-      'MarkUs authentication response is missing "session_token" or "expires_at".'
-    );
+    throw new Error('MarkUs authentication response is missing "session_token" or "expires_at".');
   }
 
   const expiresAt = Date.parse(response.expires_at);
 
   if (Number.isNaN(expiresAt)) {
-    throw new Error(
-      `MarkUs authentication response has an invalid "expires_at" value: "${response.expires_at}".`
-    );
+    throw new Error(`MarkUs authentication response has an invalid "expires_at" value: "${response.expires_at}".`);
   }
 
   sessionCache.set(cacheKey, {
@@ -169,9 +149,7 @@ export async function getOrCreateSession(
   return response.session_token;
 }
 
-export async function fetchAvailableAssignments(
-  markusUrl: string
-): Promise<IAssignmentsResponse> {
+export async function fetchAvailableAssignments(markusUrl: string): Promise<IAssignmentsResponse> {
   const assignmentsUrl = new URL('jupyter/assignments', markusUrl).toString();
 
   let sessionToken = await getOrCreateSession(markusUrl);
@@ -202,10 +180,7 @@ export async function fetchAvailableAssignments(
 
   if (!response.ok) {
     throw new MarkUsServerError(
-      `MarkUs server error ${response.status}: ${extractErrorMessage(
-        response.status,
-        text
-      )}`,
+      `MarkUs server error ${response.status}: ${extractErrorMessage(response.status, text)}`,
       response.status
     );
   }

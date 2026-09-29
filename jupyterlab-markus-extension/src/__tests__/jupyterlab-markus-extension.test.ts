@@ -70,15 +70,12 @@ function makePanel(
     metadata?: unknown;
   } = {}
 ): NotebookPanel {
-  const path =
-    options.path === undefined ? 'notebooks/demo.ipynb' : options.path;
+  const path = options.path === undefined ? 'notebooks/demo.ipynb' : options.path;
 
   return {
     context: {
       path,
-      contentsModel: options.contentsModelName
-        ? { name: options.contentsModelName }
-        : null
+      contentsModel: options.contentsModelName ? { name: options.contentsModelName } : null
     },
     content: {
       model: {
@@ -90,71 +87,51 @@ function makePanel(
 
 describe('normalizeBaseUrl', () => {
   it('trims surrounding whitespace', () => {
-    expect(normalizeBaseUrl('  http://localhost:3000/  ')).toBe(
-      'http://localhost:3000/'
-    );
+    expect(normalizeBaseUrl('  http://localhost:3000/  ')).toBe('http://localhost:3000/');
   });
 
   it('throws on a blank value', () => {
-    expect(() => normalizeBaseUrl('   ')).toThrow(
-      'MarkUs URL cannot be blank.'
-    );
+    expect(() => normalizeBaseUrl('   ')).toThrow('MarkUs URL cannot be blank.');
   });
 
   it('throws a friendly error on an invalid URL', () => {
-    expect(() => normalizeBaseUrl('not-a-url')).toThrow(
-      /MarkUs server URL is not valid/
-    );
+    expect(() => normalizeBaseUrl('not-a-url')).toThrow(/MarkUs server URL is not valid/);
   });
 
   it('appends a trailing slash when missing', () => {
-    expect(normalizeBaseUrl('http://localhost:3000')).toBe(
-      'http://localhost:3000/'
-    );
+    expect(normalizeBaseUrl('http://localhost:3000')).toBe('http://localhost:3000/');
   });
 
   it('leaves an existing trailing slash alone', () => {
-    expect(normalizeBaseUrl('http://localhost:3000/')).toBe(
-      'http://localhost:3000/'
-    );
+    expect(normalizeBaseUrl('http://localhost:3000/')).toBe('http://localhost:3000/');
   });
 
   it('preserves a sub-path while adding the trailing slash', () => {
-    expect(normalizeBaseUrl('http://localhost:3000/csc108')).toBe(
-      'http://localhost:3000/csc108/'
-    );
+    expect(normalizeBaseUrl('http://localhost:3000/csc108')).toBe('http://localhost:3000/csc108/');
   });
 });
 
 describe('assertTrustedOrigin', () => {
   it('does not throw when the origin is trusted', () => {
     expect(() =>
-      assertTrustedOrigin('https://markus.example.com/csc108/', [
-        'https://markus.example.com'
-      ])
+      assertTrustedOrigin('https://markus.example.com/csc108/', ['https://markus.example.com'])
     ).not.toThrow();
   });
 
   it('matches on origin only, ignoring path differences', () => {
     expect(() =>
-      assertTrustedOrigin('https://markus.example.com/some/deep/path', [
-        'https://markus.example.com'
-      ])
+      assertTrustedOrigin('https://markus.example.com/some/deep/path', ['https://markus.example.com'])
     ).not.toThrow();
   });
 
   it('throws a specific message when no origins are trusted at all', () => {
-    expect(() =>
-      assertTrustedOrigin('https://markus.example.com/', [])
-    ).toThrow('No trusted MarkUs origins are configured.');
+    expect(() => assertTrustedOrigin('https://markus.example.com/', [])).toThrow(
+      'No trusted MarkUs origins are configured.'
+    );
   });
 
   it('throws naming the untrusted origin when the list is non-empty', () => {
-    expect(() =>
-      assertTrustedOrigin('https://evil.example.com/', [
-        'https://markus.example.com'
-      ])
-    ).toThrow(
+    expect(() => assertTrustedOrigin('https://evil.example.com/', ['https://markus.example.com'])).toThrow(
       /MarkUs origin "https:\/\/evil\.example\.com" is not trusted/
     );
   });
@@ -189,9 +166,7 @@ describe('getCurrentNotebookPanel', () => {
       currentWidget: null
     } as unknown as INotebookTracker;
 
-    expect(() => getCurrentNotebookPanel(tracker)).toThrow(
-      'No active notebook is open.'
-    );
+    expect(() => getCurrentNotebookPanel(tracker)).toThrow('No active notebook is open.');
   });
 });
 
@@ -216,9 +191,7 @@ describe('getNotebookName', () => {
   it('throws when neither is available', () => {
     const panel = makePanel({ path: '' });
 
-    expect(() => getNotebookName(panel)).toThrow(
-      'Could not determine notebook name.'
-    );
+    expect(() => getNotebookName(panel)).toThrow('Could not determine notebook name.');
   });
 });
 
@@ -239,9 +212,7 @@ describe('buildSubmitPayload', () => {
   it('throws when the notebook path is unavailable', () => {
     const panel = makePanel({ path: '' });
 
-    expect(() =>
-      buildSubmitPayload(panel, markus, 'session-token')
-    ).toThrow('Could not determine notebook path.');
+    expect(() => buildSubmitPayload(panel, markus, 'session-token')).toThrow('Could not determine notebook path.');
   });
 
   it('throws when no Jupyter token is available', () => {
@@ -252,9 +223,7 @@ describe('buildSubmitPayload', () => {
       contentsModelName: 'demo.ipynb'
     });
 
-    expect(() =>
-      buildSubmitPayload(panel, markus, 'session-token')
-    ).toThrow('No Jupyter token available.');
+    expect(() => buildSubmitPayload(panel, markus, 'session-token')).toThrow('No Jupyter token available.');
   });
 
   it('assembles the full payload from the panel, MarkUs target, PageConfig, and session token', () => {
@@ -299,9 +268,7 @@ describe('submitWithSessionRetry', () => {
     invalidateSession(markus.url);
   });
 
-  function authResponse(
-    sessionToken: string
-  ): {
+  function authResponse(sessionToken: string): {
     ok: true;
     status: 200;
     text: () => Promise<string>;
@@ -357,9 +324,7 @@ describe('submitWithSessionRetry', () => {
       contentsModelName: 'demo.ipynb'
     });
 
-    mockFetch
-      .mockResolvedValueOnce(authResponse('sess-1'))
-      .mockResolvedValueOnce(submitSuccess());
+    mockFetch.mockResolvedValueOnce(authResponse('sess-1')).mockResolvedValueOnce(submitSuccess());
 
     const result = await submitWithSessionRetry(panel, markus);
 
@@ -384,9 +349,7 @@ describe('submitWithSessionRetry', () => {
     expect(result.submitted_file).toBe('demo.ipynb');
     expect(mockFetch).toHaveBeenCalledTimes(4);
 
-    const secondSubmitBody = JSON.parse(
-      (mockFetch.mock.calls[3][1] as RequestInit).body as string
-    );
+    const secondSubmitBody = JSON.parse((mockFetch.mock.calls[3][1] as RequestInit).body as string);
 
     expect(secondSubmitBody.session_token).toBe('sess-2');
   });
@@ -403,9 +366,7 @@ describe('submitWithSessionRetry', () => {
       .mockResolvedValueOnce(authResponse('sess-2'))
       .mockResolvedValueOnce(submitUnauthorized());
 
-    await expect(
-      submitWithSessionRetry(panel, markus)
-    ).rejects.toMatchObject({
+    await expect(submitWithSessionRetry(panel, markus)).rejects.toMatchObject({
       name: 'MarkUsServerError',
       status: 401
     });
@@ -419,21 +380,17 @@ describe('submitWithSessionRetry', () => {
       contentsModelName: 'demo.ipynb'
     });
 
-    mockFetch
-      .mockResolvedValueOnce(authResponse('sess-1'))
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-        text: async () =>
-          JSON.stringify({
-            status: 'error',
-            message: 'Not a student in this course.'
-          })
-      });
+    mockFetch.mockResolvedValueOnce(authResponse('sess-1')).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: async () =>
+        JSON.stringify({
+          status: 'error',
+          message: 'Not a student in this course.'
+        })
+    });
 
-    await expect(
-      submitWithSessionRetry(panel, markus)
-    ).rejects.toMatchObject({
+    await expect(submitWithSessionRetry(panel, markus)).rejects.toMatchObject({
       name: 'MarkUsServerError',
       status: 403
     });
@@ -447,25 +404,23 @@ describe('selectSubmissionTarget', () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
 
-    jest
-      .spyOn(session, 'fetchAvailableAssignments')
-      .mockResolvedValue({
-        status: 'success',
-        courses: [
-          {
-            id: 1,
-            name: 'csc108',
-            display_name: 'Introduction to Computer Programming',
-            assignments: [
-              {
-                id: 2,
-                short_identifier: 'A1',
-                description: 'Assignment 1'
-              }
-            ]
-          }
-        ]
-      });
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+      status: 'success',
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming',
+          assignments: [
+            {
+              id: 2,
+              short_identifier: 'A1',
+              description: 'Assignment 1'
+            }
+          ]
+        }
+      ]
+    });
 
     (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
       const node = body.node as HTMLElement;
@@ -479,9 +434,7 @@ describe('selectSubmissionTarget', () => {
       };
     });
 
-    await expect(
-      selectSubmissionTarget('http://localhost:3000/')
-    ).resolves.toEqual({
+    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
       url: 'http://localhost:3000/',
       course_id: 1,
       course: 'csc108',
@@ -494,37 +447,35 @@ describe('selectSubmissionTarget', () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
 
-    jest
-      .spyOn(session, 'fetchAvailableAssignments')
-      .mockResolvedValue({
-        status: 'success',
-        courses: [
-          {
-            id: 1,
-            name: 'csc108',
-            display_name: 'Introduction to Computer Programming',
-            assignments: [
-              {
-                id: 2,
-                short_identifier: 'A1',
-                description: 'Assignment 1'
-              }
-            ]
-          },
-          {
-            id: 3,
-            name: 'csc148',
-            display_name: 'Introduction to Computer Science',
-            assignments: [
-              {
-                id: 4,
-                short_identifier: 'A2',
-                description: 'Assignment 2'
-              }
-            ]
-          }
-        ]
-      });
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+      status: 'success',
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming',
+          assignments: [
+            {
+              id: 2,
+              short_identifier: 'A1',
+              description: 'Assignment 1'
+            }
+          ]
+        },
+        {
+          id: 3,
+          name: 'csc148',
+          display_name: 'Introduction to Computer Science',
+          assignments: [
+            {
+              id: 4,
+              short_identifier: 'A2',
+              description: 'Assignment 2'
+            }
+          ]
+        }
+      ]
+    });
 
     (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
       const node = body.node as HTMLElement;
@@ -547,9 +498,7 @@ describe('selectSubmissionTarget', () => {
       };
     });
 
-    await expect(
-      selectSubmissionTarget('http://localhost:3000/')
-    ).resolves.toEqual({
+    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
       url: 'http://localhost:3000/',
       course_id: 3,
       course: 'csc148',
@@ -561,17 +510,13 @@ describe('selectSubmissionTarget', () => {
   it('throws a clear error when the user has no active course enrollment', async () => {
     const session = require('../session');
 
-    jest
-      .spyOn(session, 'fetchAvailableAssignments')
-      .mockResolvedValue({
-        status: 'success',
-        courses: [],
-        reason: 'no_enrollment'
-      });
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+      status: 'success',
+      courses: [],
+      reason: 'no_enrollment'
+    });
 
-    await expect(
-      selectSubmissionTarget('http://localhost:3000/')
-    ).rejects.toThrow(
+    await expect(selectSubmissionTarget('http://localhost:3000/')).rejects.toThrow(
       'No active MarkUs course enrollment was found for your account.'
     );
   });
@@ -579,17 +524,13 @@ describe('selectSubmissionTarget', () => {
   it('throws a clear error when there are no available Jupyter-enabled assignments', async () => {
     const session = require('../session');
 
-    jest
-      .spyOn(session, 'fetchAvailableAssignments')
-      .mockResolvedValue({
-        status: 'success',
-        courses: [],
-        reason: 'no_available_assignments'
-      });
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+      status: 'success',
+      courses: [],
+      reason: 'no_available_assignments'
+    });
 
-    await expect(
-      selectSubmissionTarget('http://localhost:3000/')
-    ).rejects.toThrow(
+    await expect(selectSubmissionTarget('http://localhost:3000/')).rejects.toThrow(
       'You are enrolled in MarkUs, but there are no currently available Jupyter-enabled assignments.'
     );
   });
@@ -597,17 +538,13 @@ describe('selectSubmissionTarget', () => {
   it('throws a clear error when API submission is disabled', async () => {
     const session = require('../session');
 
-    jest
-      .spyOn(session, 'fetchAvailableAssignments')
-      .mockResolvedValue({
-        status: 'success',
-        courses: [],
-        reason: 'api_submission_disabled'
-      });
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+      status: 'success',
+      courses: [],
+      reason: 'api_submission_disabled'
+    });
 
-    await expect(
-      selectSubmissionTarget('http://localhost:3000/')
-    ).rejects.toThrow(
+    await expect(selectSubmissionTarget('http://localhost:3000/')).rejects.toThrow(
       'A MarkUs assignment is available, but Jupyter/API submission is not enabled for it. Please contact your instructor.'
     );
   });
@@ -618,29 +555,25 @@ describe('selectSubmissionTarget', () => {
 
     (showDialog as jest.Mock).mockClear();
 
-    jest
-      .spyOn(session, 'fetchAvailableAssignments')
-      .mockResolvedValue({
-        status: 'success',
-        courses: [
-          {
-            id: 1,
-            name: 'csc108',
-            display_name: 'Introduction to Computer Programming',
-            assignments: [
-              {
-                id: 2,
-                short_identifier: 'A1',
-                description: 'Assignment 1'
-              }
-            ]
-          }
-        ]
-      });
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+      status: 'success',
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming',
+          assignments: [
+            {
+              id: 2,
+              short_identifier: 'A1',
+              description: 'Assignment 1'
+            }
+          ]
+        }
+      ]
+    });
 
-    await expect(
-      selectSubmissionTarget('http://localhost:3000/')
-    ).resolves.toEqual({
+    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
       url: 'http://localhost:3000/',
       course_id: 1,
       course: 'csc108',
@@ -652,14 +585,12 @@ describe('selectSubmissionTarget', () => {
   });
 
   it('shows the single course as read-only text when there are multiple assignments', async () => {
-  const { showDialog } = require('@jupyterlab/apputils');
-  const session = require('../session');
+    const { showDialog } = require('@jupyterlab/apputils');
+    const session = require('../session');
 
-  (showDialog as jest.Mock).mockClear();
+    (showDialog as jest.Mock).mockClear();
 
-  jest
-    .spyOn(session, 'fetchAvailableAssignments')
-    .mockResolvedValue({
+    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
       status: 'success',
       courses: [
         {
@@ -683,43 +614,37 @@ describe('selectSubmissionTarget', () => {
       ]
     });
 
-  (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
-    const node = body.node as HTMLElement;
-    const selects = node.querySelectorAll('select');
+    (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
+      const node = body.node as HTMLElement;
+      const selects = node.querySelectorAll('select');
 
-    expect(selects).toHaveLength(1);
+      expect(selects).toHaveLength(1);
 
-    const assignmentSelect = selects[0] as HTMLSelectElement;
+      const assignmentSelect = selects[0] as HTMLSelectElement;
 
-    expect(node.textContent).toContain(
-      'csc108 — Introduction to Computer Programming'
-    );
+      expect(node.textContent).toContain('csc108 — Introduction to Computer Programming');
 
-    expect(assignmentSelect.options).toHaveLength(2);
+      expect(assignmentSelect.options).toHaveLength(2);
 
-    expect(assignmentSelect.options[1].textContent).toContain('A2');
-    expect(assignmentSelect.options[1].textContent).toContain(
-      'Assignment 2'
-    );
-    expect(assignmentSelect.options[1].textContent).toContain('Due');
+      expect(assignmentSelect.options[1].textContent).toContain('A2');
+      expect(assignmentSelect.options[1].textContent).toContain('Assignment 2');
+      expect(assignmentSelect.options[1].textContent).toContain('Due');
 
-    assignmentSelect.value = '3';
+      assignmentSelect.value = '3';
 
-    return {
-      button: { accept: true }
-    };
+      return {
+        button: { accept: true }
+      };
+    });
+
+    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
+      url: 'http://localhost:3000/',
+      course_id: 1,
+      course: 'csc108',
+      assignment_id: 3,
+      assignment: 'A2'
+    });
   });
-
-  await expect(
-    selectSubmissionTarget('http://localhost:3000/')
-  ).resolves.toEqual({
-    url: 'http://localhost:3000/',
-    course_id: 1,
-    course: 'csc108',
-    assignment_id: 3,
-    assignment: 'A2'
-  });
-});
 });
 
 describe('reportSuccess', () => {

@@ -237,9 +237,7 @@ describe('fetchAvailableAssignments', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
-    expect(mockFetch.mock.calls[1][0]).toBe(
-      'http://assignments.example.com/jupyter/assignments'
-    );
+    expect(mockFetch.mock.calls[1][0]).toBe('http://assignments.example.com/jupyter/assignments');
 
     expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
       session_token: 'sess-1',
@@ -256,57 +254,55 @@ describe('fetchAvailableAssignments', () => {
         ok: true,
         status: 200,
         text: async () =>
-        JSON.stringify({
+          JSON.stringify({
             status: 'success',
             session_token: 'sess-1',
             expires_at: new Date(Date.now() + 60_000).toISOString()
           })
-        })
+      })
       .mockResolvedValueOnce({
         ok: false,
         status: 401,
         text: async () =>
-        JSON.stringify({
-          status: 'error',
-          message: 'Session expired.'
-        })
+          JSON.stringify({
+            status: 'error',
+            message: 'Session expired.'
+          })
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         text: async () =>
-        JSON.stringify({
-          status: 'success',
-          session_token: 'sess-2',
-          expires_at: new Date(Date.now() + 60_000).toISOString()
-        })
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-2',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         text: async () =>
-        JSON.stringify({
-          status: 'success',
-          courses: []
-        })
+          JSON.stringify({
+            status: 'success',
+            courses: []
+          })
       });
-    
+
     const result = await fetchAvailableAssignments(markusUrl);
-    
+
     expect(result).toEqual({
       status: 'success',
       courses: []
     });
-    
+
     expect(mockFetch).toHaveBeenCalledTimes(4);
-    
-    const retriedBody = JSON.parse(
-      mockFetch.mock.calls[3][1].body
-    );
-    
+
+    const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
+
     expect(retriedBody.session_token).toBe('sess-2');
   });
-    
+
   it('propagates non-401 assignment request failures without retrying', async () => {
     mockFetch
       .mockResolvedValueOnce({
@@ -329,9 +325,7 @@ describe('fetchAvailableAssignments', () => {
           })
       });
 
-    await expect(
-      fetchAvailableAssignments(markusUrl)
-    ).rejects.toMatchObject({
+    await expect(fetchAvailableAssignments(markusUrl)).rejects.toMatchObject({
       name: 'MarkUsServerError',
       status: 403
     });
