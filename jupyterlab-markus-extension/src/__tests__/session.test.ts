@@ -9,17 +9,20 @@ jest.mock('@jupyterlab/coreutils', () => ({
 
 import { PageConfig } from '@jupyterlab/coreutils';
 
-import { authenticateWithMarkUs, getOrCreateSession, invalidateSession, MarkUsServerError } from '../session';
+import {
+  authenticateWithMarkUs,
+  fetchAssignments,
+  fetchCourses,
+  getOrCreateSession,
+  invalidateSession,
+  MarkUsServerError
+} from '../session';
 
 const mockGetBaseUrl = PageConfig.getBaseUrl as jest.Mock;
 const mockGetToken = PageConfig.getToken as jest.Mock;
 
 describe('authenticateWithMarkUs', () => {
-  const markus = {
-    url: 'http://localhost:3000/',
-    course_id: 1,
-    assignment_id: 2
-  };
+  const markusUrl = 'http://localhost:3000/';
 
   let mockFetch: jest.Mock;
 
@@ -43,7 +46,7 @@ describe('authenticateWithMarkUs', () => {
         })
     });
 
-    const result = await authenticateWithMarkUs(markus);
+    const result = await authenticateWithMarkUs(markusUrl);
 
     expect(mockFetch).toHaveBeenCalledWith(
       'http://localhost:3000/jupyter/authenticate',
@@ -72,7 +75,7 @@ describe('authenticateWithMarkUs', () => {
 
     let caught: unknown;
     try {
-      await authenticateWithMarkUs(markus);
+      await authenticateWithMarkUs(markusUrl);
     } catch (error) {
       caught = error;
     }
@@ -84,19 +87,15 @@ describe('authenticateWithMarkUs', () => {
 
   it('throws when no Jupyter token is available', async () => {
     mockGetToken.mockReturnValue('');
-    await expect(authenticateWithMarkUs(markus)).rejects.toThrow('No Jupyter token available.');
+    await expect(authenticateWithMarkUs(markusUrl)).rejects.toThrow('No Jupyter token available.');
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
 describe('getOrCreateSession / invalidateSession', () => {
-  // A distinct origin per describe block keeps the module-level session
+  // A distinct base URL per describe block keeps the module-level session
   // cache from leaking state between suites.
-  const markus = {
-    url: 'http://session-cache.example.com/',
-    course_id: 1,
-    assignment_id: 2
-  };
+  const markusUrl = 'http://session-cache.example.com/';
 
   let mockFetch: jest.Mock;
 
@@ -105,7 +104,7 @@ describe('getOrCreateSession / invalidateSession', () => {
     mockGetToken.mockReset().mockReturnValue('test-token');
     mockFetch = jest.fn();
     (global as any).fetch = mockFetch;
-    invalidateSession(markus);
+    invalidateSession(markusUrl);
   });
 
   function mockAuthSuccess(sessionToken: string, expiresAt: string): void {
@@ -119,8 +118,8 @@ describe('getOrCreateSession / invalidateSession', () => {
   it('authenticates once and reuses the cached token within its TTL', async () => {
     mockAuthSuccess('sess-1', new Date(Date.now() + 60_000).toISOString());
 
-    const first = await getOrCreateSession(markus);
-    const second = await getOrCreateSession(markus);
+    const first = await getOrCreateSession(markusUrl);
+    const second = await getOrCreateSession(markusUrl);
 
     expect(first).toBe('sess-1');
     expect(second).toBe('sess-1');
@@ -131,8 +130,8 @@ describe('getOrCreateSession / invalidateSession', () => {
     mockAuthSuccess('sess-1', new Date(Date.now() + 5_000).toISOString());
     mockAuthSuccess('sess-2', new Date(Date.now() + 60_000).toISOString());
 
-    const first = await getOrCreateSession(markus);
-    const second = await getOrCreateSession(markus);
+    const first = await getOrCreateSession(markusUrl);
+    const second = await getOrCreateSession(markusUrl);
 
     expect(first).toBe('sess-1');
     expect(second).toBe('sess-2');
@@ -143,9 +142,9 @@ describe('getOrCreateSession / invalidateSession', () => {
     mockAuthSuccess('sess-1', new Date(Date.now() + 60_000).toISOString());
     mockAuthSuccess('sess-2', new Date(Date.now() + 60_000).toISOString());
 
-    const first = await getOrCreateSession(markus);
-    invalidateSession(markus);
-    const second = await getOrCreateSession(markus);
+    const first = await getOrCreateSession(markusUrl);
+    invalidateSession(markusUrl);
+    const second = await getOrCreateSession(markusUrl);
 
     expect(first).toBe('sess-1');
     expect(second).toBe('sess-2');
@@ -159,12 +158,299 @@ describe('getOrCreateSession / invalidateSession', () => {
       text: async () => JSON.stringify({ status: 'success' })
     });
 
-    await expect(getOrCreateSession(markus)).rejects.toThrow(/missing "session_token" or "expires_at"/);
+    await expect(getOrCreateSession(markusUrl)).rejects.toThrow(/missing "session_token" or "expires_at"/);
   });
 
   it('throws when expires_at cannot be parsed', async () => {
     mockAuthSuccess('sess-1', 'not-a-date');
 
-    await expect(getOrCreateSession(markus)).rejects.toThrow(/invalid "expires_at" value/);
+    await expect(getOrCreateSession(markusUrl)).rejects.toThrow(/invalid "expires_at" value/);
+  });
+});
+
+describe('fetchCourses', () => {
+  const markusUrl = 'http://courses.example.com/';
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
+    mockGetToken.mockReset().mockReturnValue('test-token');
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+    invalidateSession(markusUrl);
+  });
+
+  it('authenticates and returns the available courses', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            courses: [
+              {
+                id: 1,
+                name: 'csc108',
+                display_name: 'Introduction to Computer Programming'
+              }
+            ]
+          })
+      });
+
+    const result = await fetchCourses(markusUrl);
+
+    expect(result).toEqual({
+      status: 'success',
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming'
+        }
+      ]
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    expect(mockFetch.mock.calls[1][0]).toBe('http://courses.example.com/jupyter/courses');
+
+    expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
+      session_token: 'sess-1',
+      jupyter: {
+        base_url: 'http://localhost:8888/',
+        token: 'test-token'
+      }
+    });
+  });
+
+  it('re-authenticates and retries once when the courses request returns 401', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: async () =>
+          JSON.stringify({
+            status: 'error',
+            message: 'Session expired.'
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-2',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            courses: []
+          })
+      });
+
+    const result = await fetchCourses(markusUrl);
+
+    expect(result).toEqual({
+      status: 'success',
+      courses: []
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+
+    const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
+
+    expect(retriedBody.session_token).toBe('sess-2');
+  });
+});
+
+describe('fetchAssignments', () => {
+  const markusUrl = 'http://assignments.example.com/';
+  const courseId = 1;
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
+    mockGetToken.mockReset().mockReturnValue('test-token');
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+    invalidateSession(markusUrl);
+  });
+
+  it('authenticates and returns assignments for the requested course', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            assignments: [
+              {
+                id: 2,
+                short_identifier: 'A1',
+                description: 'Assignment 1',
+                due_date: null
+              }
+            ]
+          })
+      });
+
+    const result = await fetchAssignments(markusUrl, courseId);
+
+    expect(result).toEqual({
+      status: 'success',
+      assignments: [
+        {
+          id: 2,
+          short_identifier: 'A1',
+          description: 'Assignment 1',
+          due_date: null
+        }
+      ]
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    expect(mockFetch.mock.calls[1][0]).toBe('http://assignments.example.com/jupyter/assignments');
+
+    expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
+      course_id: 1,
+      session_token: 'sess-1',
+      jupyter: {
+        base_url: 'http://localhost:8888/',
+        token: 'test-token'
+      }
+    });
+  });
+
+  it('re-authenticates and retries once when the assignments request returns 401', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: async () =>
+          JSON.stringify({
+            status: 'error',
+            message: 'Session expired.'
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-2',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            assignments: []
+          })
+      });
+
+    const result = await fetchAssignments(markusUrl, courseId);
+
+    expect(result).toEqual({
+      status: 'success',
+      assignments: []
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+
+    const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
+
+    expect(retriedBody).toEqual({
+      course_id: 1,
+      session_token: 'sess-2',
+      jupyter: {
+        base_url: 'http://localhost:8888/',
+        token: 'test-token'
+      }
+    });
+  });
+
+  it('propagates non-401 assignment request failures without retrying', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: async () =>
+          JSON.stringify({
+            status: 'error',
+            message: 'Not authorized.'
+          })
+      });
+
+    await expect(fetchAssignments(markusUrl, courseId)).rejects.toMatchObject({
+      name: 'MarkUsServerError',
+      status: 403
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
