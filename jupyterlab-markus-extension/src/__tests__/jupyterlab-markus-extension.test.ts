@@ -400,151 +400,177 @@ describe('submitWithSessionRetry', () => {
 });
 
 describe('selectSubmissionTarget', () => {
+  const markusUrl = 'http://localhost:3000/';
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('returns the selected course and assignment', async () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
       courses: [
         {
           id: 1,
           name: 'csc108',
-          display_name: 'Introduction to Computer Programming',
-          assignments: [
-            {
-              id: 2,
-              short_identifier: 'A1',
-              description: 'Assignment 1'
-            }
-          ]
+          display_name: 'Introduction to Computer Programming'
         }
       ]
     });
 
-    (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
-      const node = body.node as HTMLElement;
-      const selects = node.querySelectorAll('select');
-
-      (selects[0] as HTMLSelectElement).value = '1';
-      (selects[1] as HTMLSelectElement).value = '2';
-
-      return {
-        button: { accept: true }
-      };
+    jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: [
+        {
+          id: 2,
+          short_identifier: 'A1',
+          description: 'Assignment 1',
+          due_date: null
+        }
+      ]
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
-      url: 'http://localhost:3000/',
+    await expect(selectSubmissionTarget(markusUrl)).resolves.toEqual({
+      url: markusUrl,
       course_id: 1,
       course: 'csc108',
       assignment_id: 2,
       assignment: 'A1'
     });
+
+    expect(session.fetchCourses).toHaveBeenCalledWith(markusUrl);
+    expect(session.fetchAssignments).toHaveBeenCalledWith(markusUrl, 1);
+    expect(showDialog).not.toHaveBeenCalled();
   });
 
-  it('updates the assignment options when the selected course changes', async () => {
+  it('fetches assignments for the course selected by the user', async () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
       courses: [
         {
           id: 1,
           name: 'csc108',
-          display_name: 'Introduction to Computer Programming',
-          assignments: [
-            {
-              id: 2,
-              short_identifier: 'A1',
-              description: 'Assignment 1'
-            }
-          ]
+          display_name: 'Introduction to Computer Programming'
         },
         {
           id: 3,
           name: 'csc148',
-          display_name: 'Introduction to Computer Science',
-          assignments: [
-            {
-              id: 4,
-              short_identifier: 'A2',
-              description: 'Assignment 2'
-            }
-          ]
+          display_name: 'Introduction to Computer Science'
         }
       ]
     });
 
-    (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
+    jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: [
+        {
+          id: 4,
+          short_identifier: 'A2',
+          description: 'Assignment 2',
+          due_date: null
+        }
+      ]
+    });
+
+    (showDialog as jest.Mock).mockImplementationOnce(async ({ body }) => {
       const node = body.node as HTMLElement;
-      const selects = node.querySelectorAll('select');
+      const courseSelect = node.querySelector('select') as HTMLSelectElement;
 
-      const courseSelect = selects[0] as HTMLSelectElement;
-      const assignmentSelect = selects[1] as HTMLSelectElement;
-
-      expect(assignmentSelect.options).toHaveLength(1);
-      expect(assignmentSelect.options[0].value).toBe('2');
+      expect(courseSelect.options).toHaveLength(2);
 
       courseSelect.value = '3';
-      courseSelect.dispatchEvent(new Event('change'));
-
-      expect(assignmentSelect.options).toHaveLength(1);
-      expect(assignmentSelect.options[0].value).toBe('4');
 
       return {
         button: { accept: true }
       };
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
-      url: 'http://localhost:3000/',
+    await expect(selectSubmissionTarget(markusUrl)).resolves.toEqual({
+      url: markusUrl,
       course_id: 3,
       course: 'csc148',
       assignment_id: 4,
       assignment: 'A2'
     });
+
+    expect(session.fetchAssignments).toHaveBeenCalledWith(markusUrl, 3);
   });
 
   it('throws a clear error when the user has no active course enrollment', async () => {
     const session = require('../session');
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
       courses: [],
       reason: 'no_enrollment'
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).rejects.toThrow(
+    const fetchAssignmentsSpy = jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: []
+    });
+
+    await expect(selectSubmissionTarget(markusUrl)).rejects.toThrow(
       'No active MarkUs course enrollment was found for your account.'
     );
+
+    expect(fetchAssignmentsSpy).not.toHaveBeenCalled();
   });
 
   it('throws a clear error when there are no available Jupyter-enabled assignments', async () => {
     const session = require('../session');
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
-      courses: [],
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming'
+        }
+      ]
+    });
+
+    jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: [],
       reason: 'no_available_assignments'
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).rejects.toThrow(
-      'You are enrolled in MarkUs, but there are no currently available Jupyter-enabled assignments.'
+    await expect(selectSubmissionTarget(markusUrl)).rejects.toThrow(
+      'There are no currently available assignments for this MarkUs course.'
     );
+
+    expect(session.fetchAssignments).toHaveBeenCalledWith(markusUrl, 1);
   });
 
   it('throws a clear error when API submission is disabled', async () => {
     const session = require('../session');
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
-      courses: [],
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming'
+        }
+      ]
+    });
+
+    jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: [],
       reason: 'api_submission_disabled'
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).rejects.toThrow(
+    await expect(selectSubmissionTarget(markusUrl)).rejects.toThrow(
       'A MarkUs assignment is available, but Jupyter/API submission is not enabled for it. Please contact your instructor.'
     );
   });
@@ -555,26 +581,31 @@ describe('selectSubmissionTarget', () => {
 
     (showDialog as jest.Mock).mockClear();
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
       courses: [
         {
           id: 1,
           name: 'csc108',
-          display_name: 'Introduction to Computer Programming',
-          assignments: [
-            {
-              id: 2,
-              short_identifier: 'A1',
-              description: 'Assignment 1'
-            }
-          ]
+          display_name: 'Introduction to Computer Programming'
         }
       ]
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
-      url: 'http://localhost:3000/',
+    jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: [
+        {
+          id: 2,
+          short_identifier: 'A1',
+          description: 'Assignment 1',
+          due_date: null
+        }
+      ]
+    });
+
+    await expect(selectSubmissionTarget(markusUrl)).resolves.toEqual({
+      url: markusUrl,
       course_id: 1,
       course: 'csc108',
       assignment_id: 2,
@@ -590,31 +621,36 @@ describe('selectSubmissionTarget', () => {
 
     (showDialog as jest.Mock).mockClear();
 
-    jest.spyOn(session, 'fetchAvailableAssignments').mockResolvedValue({
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
       courses: [
         {
           id: 1,
           name: 'csc108',
-          display_name: 'Introduction to Computer Programming',
-          assignments: [
-            {
-              id: 2,
-              short_identifier: 'A1',
-              description: 'Assignment 1'
-            },
-            {
-              id: 3,
-              short_identifier: 'A2',
-              description: 'Assignment 2',
-              due_date: '2026-09-25T23:59:00Z'
-            }
-          ]
+          display_name: 'Introduction to Computer Programming'
         }
       ]
     });
 
-    (showDialog as jest.Mock).mockImplementation(async ({ body }) => {
+    jest.spyOn(session, 'fetchAssignments').mockResolvedValue({
+      status: 'success',
+      assignments: [
+        {
+          id: 2,
+          short_identifier: 'A1',
+          description: 'Assignment 1',
+          due_date: null
+        },
+        {
+          id: 3,
+          short_identifier: 'A2',
+          description: 'Assignment 2',
+          due_date: '2026-09-25T23:59:00Z'
+        }
+      ]
+    });
+
+    (showDialog as jest.Mock).mockImplementationOnce(async ({ body }) => {
       const node = body.node as HTMLElement;
       const selects = node.querySelectorAll('select');
 
@@ -637,13 +673,15 @@ describe('selectSubmissionTarget', () => {
       };
     });
 
-    await expect(selectSubmissionTarget('http://localhost:3000/')).resolves.toEqual({
-      url: 'http://localhost:3000/',
+    await expect(selectSubmissionTarget(markusUrl)).resolves.toEqual({
+      url: markusUrl,
       course_id: 1,
       course: 'csc108',
       assignment_id: 3,
       assignment: 'A2'
     });
+
+    expect(session.fetchAssignments).toHaveBeenCalledWith(markusUrl, 1);
   });
 });
 

@@ -11,7 +11,8 @@ import { PageConfig } from '@jupyterlab/coreutils';
 
 import {
   authenticateWithMarkUs,
-  fetchAvailableAssignments,
+  fetchAssignments,
+  fetchCourses,
   getOrCreateSession,
   invalidateSession,
   MarkUsServerError
@@ -167,8 +168,8 @@ describe('getOrCreateSession / invalidateSession', () => {
   });
 });
 
-describe('fetchAvailableAssignments', () => {
-  const markusUrl = 'http://assignments.example.com/';
+describe('fetchCourses', () => {
+  const markusUrl = 'http://courses.example.com/';
 
   let mockFetch: jest.Mock;
 
@@ -180,7 +181,7 @@ describe('fetchAvailableAssignments', () => {
     invalidateSession(markusUrl);
   });
 
-  it('authenticates and returns the available courses and assignments', async () => {
+  it('authenticates and returns the available courses', async () => {
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -202,20 +203,13 @@ describe('fetchAvailableAssignments', () => {
               {
                 id: 1,
                 name: 'csc108',
-                display_name: 'Introduction to Computer Programming',
-                assignments: [
-                  {
-                    id: 2,
-                    short_identifier: 'A1',
-                    description: 'Assignment 1'
-                  }
-                ]
+                display_name: 'Introduction to Computer Programming'
               }
             ]
           })
       });
 
-    const result = await fetchAvailableAssignments(markusUrl);
+    const result = await fetchCourses(markusUrl);
 
     expect(result).toEqual({
       status: 'success',
@@ -223,14 +217,133 @@ describe('fetchAvailableAssignments', () => {
         {
           id: 1,
           name: 'csc108',
-          display_name: 'Introduction to Computer Programming',
-          assignments: [
-            {
-              id: 2,
-              short_identifier: 'A1',
-              description: 'Assignment 1'
-            }
-          ]
+          display_name: 'Introduction to Computer Programming'
+        }
+      ]
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    expect(mockFetch.mock.calls[1][0]).toBe('http://courses.example.com/jupyter/courses');
+
+    expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
+      session_token: 'sess-1',
+      jupyter: {
+        base_url: 'http://localhost:8888/',
+        token: 'test-token'
+      }
+    });
+  });
+
+  it('re-authenticates and retries once when the courses request returns 401', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: async () =>
+          JSON.stringify({
+            status: 'error',
+            message: 'Session expired.'
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-2',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            courses: []
+          })
+      });
+
+    const result = await fetchCourses(markusUrl);
+
+    expect(result).toEqual({
+      status: 'success',
+      courses: []
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+
+    const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
+
+    expect(retriedBody.session_token).toBe('sess-2');
+  });
+});
+
+describe('fetchAssignments', () => {
+  const markusUrl = 'http://assignments.example.com/';
+  const courseId = 1;
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
+    mockGetToken.mockReset().mockReturnValue('test-token');
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+    invalidateSession(markusUrl);
+  });
+
+  it('authenticates and returns assignments for the requested course', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            session_token: 'sess-1',
+            expires_at: new Date(Date.now() + 60_000).toISOString()
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'success',
+            assignments: [
+              {
+                id: 2,
+                short_identifier: 'A1',
+                description: 'Assignment 1',
+                due_date: null
+              }
+            ]
+          })
+      });
+
+    const result = await fetchAssignments(markusUrl, courseId);
+
+    expect(result).toEqual({
+      status: 'success',
+      assignments: [
+        {
+          id: 2,
+          short_identifier: 'A1',
+          description: 'Assignment 1',
+          due_date: null
         }
       ]
     });
@@ -240,6 +353,7 @@ describe('fetchAvailableAssignments', () => {
     expect(mockFetch.mock.calls[1][0]).toBe('http://assignments.example.com/jupyter/assignments');
 
     expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
+      course_id: 1,
       session_token: 'sess-1',
       jupyter: {
         base_url: 'http://localhost:8888/',
@@ -285,22 +399,29 @@ describe('fetchAvailableAssignments', () => {
         text: async () =>
           JSON.stringify({
             status: 'success',
-            courses: []
+            assignments: []
           })
       });
 
-    const result = await fetchAvailableAssignments(markusUrl);
+    const result = await fetchAssignments(markusUrl, courseId);
 
     expect(result).toEqual({
       status: 'success',
-      courses: []
+      assignments: []
     });
 
     expect(mockFetch).toHaveBeenCalledTimes(4);
 
     const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
 
-    expect(retriedBody.session_token).toBe('sess-2');
+    expect(retriedBody).toEqual({
+      course_id: 1,
+      session_token: 'sess-2',
+      jupyter: {
+        base_url: 'http://localhost:8888/',
+        token: 'test-token'
+      }
+    });
   });
 
   it('propagates non-401 assignment request failures without retrying', async () => {
@@ -325,7 +446,7 @@ describe('fetchAvailableAssignments', () => {
           })
       });
 
-    await expect(fetchAvailableAssignments(markusUrl)).rejects.toMatchObject({
+    await expect(fetchAssignments(markusUrl, courseId)).rejects.toMatchObject({
       name: 'MarkUsServerError',
       status: 403
     });

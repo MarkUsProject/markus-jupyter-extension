@@ -19,7 +19,8 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { Widget } from '@lumino/widgets';
 
 import {
-  fetchAvailableAssignments,
+  fetchAssignments,
+  fetchCourses,
   IMarkUsCourse,
   MarkUsServerError,
   extractErrorMessage,
@@ -266,37 +267,97 @@ export async function reportSuccess(result: ISubmitResponse): Promise<void> {
 }
 
 export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUsTarget | null> {
-  const response = await fetchAvailableAssignments(markusUrl);
-
-  const courses = response.courses.filter((course: IMarkUsCourse) => course.assignments.length > 0);
+  const coursesResponse = await fetchCourses(markusUrl);
+  const courses = coursesResponse.courses;
 
   if (courses.length === 0) {
-    if (response.reason === 'no_enrollment') {
+    if (coursesResponse.reason === 'no_enrollment') {
       throw new Error('No active MarkUs course enrollment was found for your account.');
     }
 
-    if (response.reason === 'no_available_assignments') {
-      throw new Error('You are enrolled in MarkUs, but there are no currently available Jupyter-enabled assignments.');
+    throw new Error('No active MarkUs courses were found for your account.');
+  }
+
+  let selectedCourse: IMarkUsCourse;
+
+  if (courses.length === 1) {
+    selectedCourse = courses[0];
+  } else {
+    const node = document.createElement('div');
+
+    const logo = document.createElement('div');
+    logo.className = 'markus-dialog-logo';
+    logo.setAttribute('role', 'img');
+    logo.setAttribute('aria-label', 'MarkUs');
+    node.appendChild(logo);
+
+    const intro = document.createElement('p');
+    intro.textContent = 'Choose the course for this submission.';
+    node.appendChild(intro);
+
+    const courseLabel = document.createElement('label');
+    courseLabel.textContent = 'Course';
+    courseLabel.style.display = 'block';
+    courseLabel.style.marginBottom = '4px';
+    node.appendChild(courseLabel);
+
+    const courseSelect = document.createElement('select');
+    courseSelect.style.width = '100%';
+
+    for (const course of courses) {
+      const option = document.createElement('option');
+      option.value = String(course.id);
+      option.textContent = course.display_name ? `${course.name} — ${course.display_name}` : course.name;
+
+      courseSelect.appendChild(option);
     }
 
-    if (response.reason === 'api_submission_disabled') {
+    node.appendChild(courseSelect);
+
+    const result = await showDialog({
+      title: SUBMIT_LABEL,
+      body: new Widget({ node }),
+      buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Continue' })]
+    });
+
+    if (!result.button.accept) {
+      return null;
+    }
+
+    const course = courses.find((item) => item.id === Number(courseSelect.value));
+
+    if (!course) {
+      throw new Error('The selected MarkUs course could not be found.');
+    }
+
+    selectedCourse = course;
+  }
+
+  const assignmentsResponse = await fetchAssignments(markusUrl, selectedCourse.id);
+
+  const assignments = assignmentsResponse.assignments;
+
+  if (assignments.length === 0) {
+    if (assignmentsResponse.reason === 'no_available_assignments') {
+      throw new Error('There are no currently available assignments for this MarkUs course.');
+    }
+
+    if (assignmentsResponse.reason === 'api_submission_disabled') {
       throw new Error(
         'A MarkUs assignment is available, but Jupyter/API submission is not enabled for it. Please contact your instructor.'
       );
     }
 
-    throw new Error('No MarkUs courses with available Jupyter-enabled assignments were found.');
+    throw new Error('No Jupyter-enabled assignments were found for this MarkUs course.');
   }
 
-  // If there is only one possible destination, skip the selection dialog.
-  if (courses.length === 1 && courses[0].assignments.length === 1) {
-    const course = courses[0];
-    const assignment = course.assignments[0];
+  if (assignments.length === 1) {
+    const assignment = assignments[0];
 
     return {
       url: markusUrl,
-      course_id: course.id,
-      course: course.name,
+      course_id: selectedCourse.id,
+      course: selectedCourse.name,
       assignment_id: assignment.id,
       assignment: assignment.short_identifier
     };
@@ -311,7 +372,7 @@ export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUs
   node.appendChild(logo);
 
   const intro = document.createElement('p');
-  intro.textContent = 'Choose where to submit this notebook.';
+  intro.textContent = 'Choose the assignment for this submission.';
   node.appendChild(intro);
 
   const courseLabel = document.createElement('label');
@@ -320,38 +381,16 @@ export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUs
   courseLabel.style.marginBottom = '4px';
   node.appendChild(courseLabel);
 
-  let courseSelect: HTMLSelectElement | null = null;
-
-  // When there is only one course, display it as read-only text instead
-  // of a disabled dropdown so students do not mistake it for a broken control.
-  if (courses.length === 1) {
-    const course = courses[0];
-
-    const courseText = document.createElement('div');
-    courseText.textContent = course.display_name ? `${course.name} — ${course.display_name}` : course.name;
-
-    courseText.style.marginBottom = '12px';
-    courseText.style.padding = '6px 8px';
-    courseText.style.background = 'var(--jp-layout-color2)';
-    courseText.style.border = '1px solid var(--jp-border-color2)';
-    courseText.style.borderRadius = '2px';
-
-    node.appendChild(courseText);
-  } else {
-    courseSelect = document.createElement('select');
-    courseSelect.style.width = '100%';
-    courseSelect.style.marginBottom = '12px';
-
-    for (const course of courses) {
-      const option = document.createElement('option');
-      option.value = String(course.id);
-      option.textContent = course.display_name ? `${course.name} — ${course.display_name}` : course.name;
-
-      courseSelect.appendChild(option);
-    }
-
-    node.appendChild(courseSelect);
-  }
+  const courseText = document.createElement('div');
+  courseText.textContent = selectedCourse.display_name
+    ? `${selectedCourse.name} — ${selectedCourse.display_name}`
+    : selectedCourse.name;
+  courseText.style.marginBottom = '12px';
+  courseText.style.padding = '6px 8px';
+  courseText.style.background = 'var(--jp-layout-color2)';
+  courseText.style.border = '1px solid var(--jp-border-color2)';
+  courseText.style.borderRadius = '2px';
+  node.appendChild(courseText);
 
   const assignmentLabel = document.createElement('label');
   assignmentLabel.textContent = 'Assignment';
@@ -361,38 +400,22 @@ export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUs
 
   const assignmentSelect = document.createElement('select');
   assignmentSelect.style.width = '100%';
-  node.appendChild(assignmentSelect);
 
-  const populateAssignments = (): void => {
-    assignmentSelect.replaceChildren();
+  for (const assignment of assignments) {
+    const option = document.createElement('option');
+    option.value = String(assignment.id);
 
-    const selectedCourse =
-      courses.length === 1 ? courses[0] : courses.find((course) => course.id === Number(courseSelect?.value));
+    const dueDate = assignment.due_date ? new Date(assignment.due_date).toLocaleString() : null;
 
-    if (!selectedCourse) {
-      return;
-    }
+    const details = [assignment.description, dueDate ? `Due ${dueDate}` : null].filter(Boolean);
 
-    for (const assignment of selectedCourse.assignments) {
-      const option = document.createElement('option');
-      option.value = String(assignment.id);
+    option.textContent =
+      details.length > 0 ? `${assignment.short_identifier} — ${details.join(' — ')}` : assignment.short_identifier;
 
-      const dueDate = assignment.due_date ? new Date(assignment.due_date).toLocaleString() : null;
-
-      const details = [assignment.description, dueDate ? `Due ${dueDate}` : null].filter(Boolean);
-
-      option.textContent =
-        details.length > 0 ? `${assignment.short_identifier} — ${details.join(' — ')}` : assignment.short_identifier;
-
-      assignmentSelect.appendChild(option);
-    }
-  };
-
-  if (courseSelect) {
-    courseSelect.addEventListener('change', populateAssignments);
+    assignmentSelect.appendChild(option);
   }
 
-  populateAssignments();
+  node.appendChild(assignmentSelect);
 
   const result = await showDialog({
     title: SUBMIT_LABEL,
@@ -404,16 +427,7 @@ export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUs
     return null;
   }
 
-  const selectedCourse =
-    courses.length === 1 ? courses[0] : courses.find((course) => course.id === Number(courseSelect?.value));
-
-  if (!selectedCourse) {
-    throw new Error('The selected MarkUs course could not be found.');
-  }
-
-  const selectedAssignment = selectedCourse.assignments.find(
-    (assignment) => assignment.id === Number(assignmentSelect.value)
-  );
+  const selectedAssignment = assignments.find((assignment) => assignment.id === Number(assignmentSelect.value));
 
   if (!selectedAssignment) {
     throw new Error('The selected MarkUs assignment could not be found.');

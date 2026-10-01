@@ -29,13 +29,19 @@ export interface IMarkUsCourse {
   id: number;
   name: string;
   display_name: string | null;
-  assignments: IMarkUsAssignment[];
+}
+
+export interface ICoursesResponse {
+  status: string;
+  courses: IMarkUsCourse[];
+  reason?: 'no_enrollment';
+  message?: string;
 }
 
 export interface IAssignmentsResponse {
   status: string;
-  courses: IMarkUsCourse[];
-  reason?: 'no_enrollment' | 'no_available_assignments' | 'api_submission_disabled';
+  assignments: IMarkUsAssignment[];
+  reason?: 'no_available_assignments' | 'api_submission_disabled';
   message?: string;
 }
 
@@ -149,7 +155,46 @@ export async function getOrCreateSession(markusUrl: string): Promise<string> {
   return response.session_token;
 }
 
-export async function fetchAvailableAssignments(markusUrl: string): Promise<IAssignmentsResponse> {
+export async function fetchCourses(markusUrl: string): Promise<ICoursesResponse> {
+  const coursesUrl = new URL('jupyter/courses', markusUrl).toString();
+
+  let sessionToken = await getOrCreateSession(markusUrl);
+
+  const makeRequest = async (token: string): Promise<Response> => {
+    return fetch(coursesUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        session_token: token,
+        jupyter: getJupyterCredentials()
+      })
+    });
+  };
+
+  let response = await makeRequest(sessionToken);
+
+  if (response.status === 401) {
+    invalidateSession(markusUrl);
+    sessionToken = await getOrCreateSession(markusUrl);
+    response = await makeRequest(sessionToken);
+  }
+
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new MarkUsServerError(
+      `MarkUs server error ${response.status}: ${extractErrorMessage(response.status, text)}`,
+      response.status
+    );
+  }
+
+  return JSON.parse(text) as ICoursesResponse;
+}
+
+export async function fetchAssignments(markusUrl: string, courseId: number): Promise<IAssignmentsResponse> {
   const assignmentsUrl = new URL('jupyter/assignments', markusUrl).toString();
 
   let sessionToken = await getOrCreateSession(markusUrl);
@@ -162,6 +207,7 @@ export async function fetchAvailableAssignments(markusUrl: string): Promise<IAss
         Accept: 'application/json'
       },
       body: JSON.stringify({
+        course_id: courseId,
         session_token: token,
         jupyter: getJupyterCredentials()
       })
