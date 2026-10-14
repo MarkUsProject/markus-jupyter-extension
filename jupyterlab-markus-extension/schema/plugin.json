@@ -5,7 +5,7 @@
   "properties": {
     "markusUrl": {
       "type": "string",
-      "default": "https://markus.teach.cs.toronto.edu",
+      "default": "https://markus.teach.cs.toronto.edu/markus",
       "title": "MarkUs server URL",
       "description": "The MarkUs server used by the Submit to MarkUs extension."
     },
