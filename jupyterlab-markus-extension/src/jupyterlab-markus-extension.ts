@@ -30,12 +30,6 @@ import {
   invalidateSession
 } from './session';
 
-// This code never actually runs under Node (tsconfig deliberately omits
-// Node's ambient types to keep the global namespace browser-only) --
-// `process.env.NODE_ENV` is a build-time string substituted in by the
-// bundler based on --development/production mode, not a real runtime value.
-declare const process: { env: { NODE_ENV?: string } };
-
 // Declaring necessary variables
 const ACTION_PREFIX = 'markus';
 const ACTION_NAME = 'markus_submit';

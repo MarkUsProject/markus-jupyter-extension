@@ -1,0 +1,6 @@
+{
+  "jupyterlab-markus-extension:plugin": {
+    "markusUrl": "http://localhost:3000/csc108",
+    "trustedOrigins": ["http://localhost:3000"]
+  }
+}
