@@ -19,15 +19,22 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { Widget } from '@lumino/widgets';
 
 import {
+  buildSessionHeaders,
   fetchAssignments,
   fetchCourses,
+  IMarkUsAssignment,
   IMarkUsCourse,
   MarkUsServerError,
   extractErrorMessage,
-  getJupyterCredentials,
   getOrCreateSession,
   invalidateSession
 } from './session';
+
+// This code never actually runs under Node (tsconfig deliberately omits
+// Node's ambient types to keep the global namespace browser-only) --
+// `process.env.NODE_ENV` is a build-time string substituted in by the
+// bundler based on --development/production mode, not a real runtime value.
+declare const process: { env: { NODE_ENV?: string } };
 
 // Declaring necessary variables
 const ACTION_PREFIX = 'markus';
@@ -55,13 +62,6 @@ interface ISubmitPayload {
   course?: string;
   assignment_id?: number | string;
   assignment?: string;
-
-  jupyter: {
-    base_url: string;
-    token: string;
-  };
-
-  session_token: string;
 }
 
 // Creating the submission response space
@@ -127,7 +127,7 @@ export function getMarkusUrl(settings: ISettingRegistry.ISettings): string {
 
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(
-      'No MarkUs server URL is configured. Set "MarkUs server URL" in Settings > Settings Editor > Submit to MarkUs.'
+      'No MarkUs server URL is configured. Set "MarkUs server URL" in Settings > Settings Editor > MarkUs Extension.'
     );
   }
 
@@ -165,7 +165,7 @@ export function getNotebookName(panel: NotebookPanel): string {
 }
 
 // Compiling the submission payload
-export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsTarget, sessionToken: string): ISubmitPayload {
+export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsTarget): ISubmitPayload {
   const notebookPath = panel.context.path;
 
   if (!notebookPath) {
@@ -178,23 +178,23 @@ export function buildSubmitPayload(panel: NotebookPanel, markus: IMarkUsTarget, 
     course_id: markus.course_id,
     course: markus.course,
     assignment_id: markus.assignment_id,
-    assignment: markus.assignment,
-
-    jupyter: getJupyterCredentials(),
-
-    session_token: sessionToken
+    assignment: markus.assignment
   };
 }
 
 // Sending the submission request to the MarkUs server
-async function submitToServer(payload: ISubmitPayload, markus: IMarkUsTarget): Promise<ISubmitResponse> {
+async function submitToServer(
+  payload: ISubmitPayload,
+  markus: IMarkUsTarget,
+  sessionToken: string
+): Promise<ISubmitResponse> {
   const submitUrl = new URL('jupyter/submit', markus.url).toString();
 
   const response = await fetch(submitUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json'
+      ...buildSessionHeaders(sessionToken),
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
   });
@@ -221,21 +221,19 @@ async function submitToServer(payload: ISubmitPayload, markus: IMarkUsTarget): P
 // Submits with a valid session token, re-authenticating and retrying exactly
 // once if the session was rejected (expired/tampered/wrong origin/etc).
 export async function submitWithSessionRetry(panel: NotebookPanel, markus: IMarkUsTarget): Promise<ISubmitResponse> {
+  const payload = buildSubmitPayload(panel, markus);
   const sessionToken = await getOrCreateSession(markus.url);
 
   try {
-    const payload = buildSubmitPayload(panel, markus, sessionToken);
-    return await submitToServer(payload, markus);
+    return await submitToServer(payload, markus, sessionToken);
   } catch (error) {
     if (!(error instanceof MarkUsServerError) || error.status !== 401) {
       throw error;
     }
 
     invalidateSession(markus.url);
-
     const freshSessionToken = await getOrCreateSession(markus.url);
-
-    return await submitToServer(buildSubmitPayload(panel, markus, freshSessionToken), markus);
+    return await submitToServer(payload, markus, freshSessionToken);
   }
 }
 
@@ -266,103 +264,63 @@ export async function reportSuccess(result: ISubmitResponse): Promise<void> {
   });
 }
 
-export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUsTarget | null> {
-  const coursesResponse = await fetchCourses(markusUrl);
-  const courses = coursesResponse.courses;
+// Asks the user which course to submit to; returns null if they cancel.
+async function chooseCourse(courses: IMarkUsCourse[]): Promise<IMarkUsCourse | null> {
+  const node = document.createElement('div');
 
-  if (courses.length === 0) {
-    if (coursesResponse.reason === 'no_enrollment') {
-      throw new Error('No active MarkUs course enrollment was found for your account.');
-    }
+  const logo = document.createElement('div');
+  logo.className = 'markus-dialog-logo';
+  logo.setAttribute('role', 'img');
+  logo.setAttribute('aria-label', 'MarkUs');
+  node.appendChild(logo);
 
-    throw new Error('No active MarkUs courses were found for your account.');
+  const intro = document.createElement('p');
+  intro.textContent = 'Choose the course for this submission.';
+  node.appendChild(intro);
+
+  const courseLabel = document.createElement('label');
+  courseLabel.textContent = 'Course';
+  courseLabel.style.display = 'block';
+  courseLabel.style.marginBottom = '4px';
+  node.appendChild(courseLabel);
+
+  const courseSelect = document.createElement('select');
+  courseSelect.style.width = '100%';
+
+  for (const course of courses) {
+    const option = document.createElement('option');
+    option.value = String(course.id);
+    option.textContent = course.display_name ? `${course.name} — ${course.display_name}` : course.name;
+
+    courseSelect.appendChild(option);
   }
 
-  let selectedCourse: IMarkUsCourse;
+  node.appendChild(courseSelect);
 
-  if (courses.length === 1) {
-    selectedCourse = courses[0];
-  } else {
-    const node = document.createElement('div');
+  const result = await showDialog({
+    title: SUBMIT_LABEL,
+    body: new Widget({ node }),
+    buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Continue' })]
+  });
 
-    const logo = document.createElement('div');
-    logo.className = 'markus-dialog-logo';
-    logo.setAttribute('role', 'img');
-    logo.setAttribute('aria-label', 'MarkUs');
-    node.appendChild(logo);
-
-    const intro = document.createElement('p');
-    intro.textContent = 'Choose the course for this submission.';
-    node.appendChild(intro);
-
-    const courseLabel = document.createElement('label');
-    courseLabel.textContent = 'Course';
-    courseLabel.style.display = 'block';
-    courseLabel.style.marginBottom = '4px';
-    node.appendChild(courseLabel);
-
-    const courseSelect = document.createElement('select');
-    courseSelect.style.width = '100%';
-
-    for (const course of courses) {
-      const option = document.createElement('option');
-      option.value = String(course.id);
-      option.textContent = course.display_name ? `${course.name} — ${course.display_name}` : course.name;
-
-      courseSelect.appendChild(option);
-    }
-
-    node.appendChild(courseSelect);
-
-    const result = await showDialog({
-      title: SUBMIT_LABEL,
-      body: new Widget({ node }),
-      buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Continue' })]
-    });
-
-    if (!result.button.accept) {
-      return null;
-    }
-
-    const course = courses.find((item) => item.id === Number(courseSelect.value));
-
-    if (!course) {
-      throw new Error('The selected MarkUs course could not be found.');
-    }
-
-    selectedCourse = course;
+  if (!result.button.accept) {
+    return null;
   }
 
-  const assignmentsResponse = await fetchAssignments(markusUrl, selectedCourse.id);
+  const course = courses.find((item) => item.id === Number(courseSelect.value));
 
-  const assignments = assignmentsResponse.assignments;
-
-  if (assignments.length === 0) {
-    if (assignmentsResponse.reason === 'no_available_assignments') {
-      throw new Error('There are no currently available assignments for this MarkUs course.');
-    }
-
-    if (assignmentsResponse.reason === 'api_submission_disabled') {
-      throw new Error(
-        'A MarkUs assignment is available, but Jupyter/API submission is not enabled for it. Please contact your instructor.'
-      );
-    }
-
-    throw new Error('No Jupyter-enabled assignments were found for this MarkUs course.');
+  if (!course) {
+    throw new Error('The selected MarkUs course could not be found.');
   }
 
-  if (assignments.length === 1) {
-    const assignment = assignments[0];
+  return course;
+}
 
-    return {
-      url: markusUrl,
-      course_id: selectedCourse.id,
-      course: selectedCourse.name,
-      assignment_id: assignment.id,
-      assignment: assignment.short_identifier
-    };
-  }
-
+// Asks the user which assignment in the given course to submit to; returns null if they cancel.
+async function chooseAssignment(
+  course: IMarkUsCourse,
+  assignments: IMarkUsAssignment[]
+): Promise<IMarkUsAssignment | null> {
   const node = document.createElement('div');
 
   const logo = document.createElement('div');
@@ -382,9 +340,7 @@ export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUs
   node.appendChild(courseLabel);
 
   const courseText = document.createElement('div');
-  courseText.textContent = selectedCourse.display_name
-    ? `${selectedCourse.name} — ${selectedCourse.display_name}`
-    : selectedCourse.name;
+  courseText.textContent = course.display_name ? `${course.name} — ${course.display_name}` : course.name;
   courseText.style.marginBottom = '12px';
   courseText.style.padding = '6px 8px';
   courseText.style.background = 'var(--jp-layout-color2)';
@@ -433,6 +389,50 @@ export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUs
     throw new Error('The selected MarkUs assignment could not be found.');
   }
 
+  return selectedAssignment;
+}
+
+export async function selectSubmissionTarget(markusUrl: string): Promise<IMarkUsTarget | null> {
+  const coursesResponse = await fetchCourses(markusUrl);
+  const courses = coursesResponse.courses;
+
+  if (courses.length === 0) {
+    if (coursesResponse.reason === 'no_enrollment') {
+      throw new Error('No active MarkUs course enrollment was found for your account.');
+    }
+
+    throw new Error('No active MarkUs courses were found for your account.');
+  }
+
+  const selectedCourse = await chooseCourse(courses);
+
+  if (!selectedCourse) {
+    return null;
+  }
+
+  const assignmentsResponse = await fetchAssignments(markusUrl, selectedCourse.id);
+  const assignments = assignmentsResponse.assignments;
+
+  if (assignments.length === 0) {
+    if (assignmentsResponse.reason === 'no_available_assignments') {
+      throw new Error('There are no currently available assignments for this MarkUs course.');
+    }
+
+    if (assignmentsResponse.reason === 'api_submission_disabled') {
+      throw new Error(
+        'A MarkUs assignment is available, but Jupyter/API submission is not enabled for it. Please contact your instructor.'
+      );
+    }
+
+    throw new Error('No Jupyter-enabled assignments were found for this MarkUs course.');
+  }
+
+  const selectedAssignment = await chooseAssignment(selectedCourse, assignments);
+
+  if (!selectedAssignment) {
+    return null;
+  }
+
   return {
     url: markusUrl,
     course_id: selectedCourse.id,
@@ -455,7 +455,6 @@ function createConfirmationBody(notebookName: string, markus: IMarkUsTarget): Wi
   const username = PageConfig.getOption('hubUser') || '(not available)';
 
   const list = document.createElement('ul');
-
   const items: Array<[string, string]> = [
     ['Notebook', notebookName],
     ['MarkUs URL', markus.url],
@@ -469,7 +468,6 @@ function createConfirmationBody(notebookName: string, markus: IMarkUsTarget): Wi
 
     const strong = document.createElement('strong');
     strong.textContent = `${label}: `;
-
     item.appendChild(strong);
     item.appendChild(document.createTextNode(value));
 
@@ -512,11 +510,9 @@ async function submitToMarkUs(tracker: INotebookTracker, settings: ISettingRegis
     await panel.context.save();
 
     const markusUrl = getMarkusUrl(settings);
-
     assertTrustedOrigin(markusUrl, getTrustedOrigins(settings));
 
     const markus = await selectSubmissionTarget(markusUrl);
-
     if (!markus) {
       return;
     }
@@ -558,7 +554,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker, ISettingRegistry],
   optional: [ICommandPalette],
-
   activate: async (
     app: JupyterFrontEnd,
     tracker: INotebookTracker,
@@ -567,8 +562,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
   ) => {
     console.log('JupyterLab extension jupyterlab-markus-extension is activated.');
 
-    // Detect presence of JupyterHub identity, which is required
-    // for this extension.
+    // Detect presence of JupyterHub identity, which is required for this extension.
     const hasHubIdentity = Boolean(PageConfig.getOption('hubUser'));
 
     if (!hasHubIdentity) {

@@ -132,7 +132,7 @@ See the [JupyterLab documentation on settings overrides](https://jupyterlab.read
 
 An origin is the scheme, host, and port only (no path). A notebook's `markus.url` must resolve to one of the trusted origins, or the submission is rejected with an error naming the untrusted origin.
 
-**Development only**: `http://localhost:3000` is also trusted, as this is the default MarkUs development origin (see [Local development with MarkUs](#local-development-with-markus)).
+**Development only**: when running JupyterHub via `pnpm start`, `http://localhost:3000` is trusted instead, as this is the default MarkUs development origin (see [Local development with MarkUs](#local-development-with-markus)).
 
 ## Notebook metadata
 
@@ -243,6 +243,19 @@ jupyter_server:
 `dev_username` is only for local development when running standalone JupyterLab without a real JupyterHub identity endpoint.
 
 ## Local development with MarkUs
+
+The extension's built-in defaults in `schema/plugin.json` point at the production MarkUs server. When you run `pnpm start`, `jupyterhub_config.py` instead points each spawned JupyterLab at `dev/lab-settings/` (via `--LabApp.app_settings_dir`). The `overrides.json` there replaces those defaults with a local MarkUs server:
+
+```json
+{
+  "jupyterlab-markus-extension:plugin": {
+    "markusUrl": "http://localhost:3000/csc108",
+    "trustedOrigins": ["http://localhost:3000"]
+  }
+}
+```
+
+Edit that file if your local MarkUs runs elsewhere, then restart JupyterHub. Values set in **Settings > Settings Editor > Submit to MarkUs** still take precedence over these overrides.
 
 A typical local setup is:
 

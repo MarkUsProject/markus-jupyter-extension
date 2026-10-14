@@ -21,6 +21,16 @@ import {
 const mockGetBaseUrl = PageConfig.getBaseUrl as jest.Mock;
 const mockGetToken = PageConfig.getToken as jest.Mock;
 
+// Splits a request URL into its path (without query) and query parameters.
+function parseRequestUrl(url: string): { path: string; query: Record<string, string> } {
+  const parsed = new URL(url);
+
+  return {
+    path: `${parsed.origin}${parsed.pathname}`,
+    query: Object.fromEntries(parsed.searchParams)
+  };
+}
+
 describe('authenticateWithMarkUs', () => {
   const markusUrl = 'http://localhost:3000/';
 
@@ -224,14 +234,18 @@ describe('fetchCourses', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
-    expect(mockFetch.mock.calls[1][0]).toBe('http://courses.example.com/jupyter/courses');
+    const request = parseRequestUrl(mockFetch.mock.calls[1][0]);
 
-    expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
-      session_token: 'sess-1',
-      jupyter: {
-        base_url: 'http://localhost:8888/',
-        token: 'test-token'
-      }
+    expect(request.path).toBe('http://courses.example.com/jupyter/courses');
+    expect(request.query).toEqual({});
+    expect(mockFetch.mock.calls[1][1].method).toBe('GET');
+    expect(mockFetch.mock.calls[1][1].body).toBeUndefined();
+
+    expect(mockFetch.mock.calls[1][1].headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer sess-1',
+      'X-Jupyter-Base-Url': 'http://localhost:8888/',
+      'X-Jupyter-Token': 'test-token'
     });
   });
 
@@ -285,9 +299,7 @@ describe('fetchCourses', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(4);
 
-    const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
-
-    expect(retriedBody.session_token).toBe('sess-2');
+    expect(mockFetch.mock.calls[3][1].headers.Authorization).toBe('Bearer sess-2');
   });
 });
 
@@ -350,15 +362,19 @@ describe('fetchAssignments', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
-    expect(mockFetch.mock.calls[1][0]).toBe('http://assignments.example.com/jupyter/assignments');
+    const request = parseRequestUrl(mockFetch.mock.calls[1][0]);
 
-    expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
-      course_id: 1,
-      session_token: 'sess-1',
-      jupyter: {
-        base_url: 'http://localhost:8888/',
-        token: 'test-token'
-      }
+    expect(request.path).toBe('http://assignments.example.com/jupyter/assignments');
+    expect(mockFetch.mock.calls[1][1].method).toBe('GET');
+    expect(mockFetch.mock.calls[1][1].body).toBeUndefined();
+
+    expect(request.query).toEqual({ course_id: '1' });
+
+    expect(mockFetch.mock.calls[1][1].headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer sess-1',
+      'X-Jupyter-Base-Url': 'http://localhost:8888/',
+      'X-Jupyter-Token': 'test-token'
     });
   });
 
@@ -412,15 +428,13 @@ describe('fetchAssignments', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(4);
 
-    const retriedBody = JSON.parse(mockFetch.mock.calls[3][1].body);
+    expect(parseRequestUrl(mockFetch.mock.calls[3][0]).query).toEqual({ course_id: '1' });
 
-    expect(retriedBody).toEqual({
-      course_id: 1,
-      session_token: 'sess-2',
-      jupyter: {
-        base_url: 'http://localhost:8888/',
-        token: 'test-token'
-      }
+    expect(mockFetch.mock.calls[3][1].headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer sess-2',
+      'X-Jupyter-Base-Url': 'http://localhost:8888/',
+      'X-Jupyter-Token': 'test-token'
     });
   });
 

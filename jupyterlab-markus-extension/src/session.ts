@@ -147,30 +147,32 @@ export async function getOrCreateSession(markusUrl: string): Promise<string> {
     throw new Error(`MarkUs authentication response has an invalid "expires_at" value: "${response.expires_at}".`);
   }
 
-  sessionCache.set(cacheKey, {
-    sessionToken: response.session_token,
-    expiresAt
-  });
+  sessionCache.set(cacheKey, { sessionToken: response.session_token, expiresAt });
 
   return response.session_token;
 }
 
-export async function fetchCourses(markusUrl: string): Promise<ICoursesResponse> {
-  const coursesUrl = new URL('jupyter/courses', markusUrl).toString();
+// Builds the headers for a MarkUs endpoint that requires a session. The session
+// token and Jupyter credentials go in headers rather than the URL or body so
+// they don't end up in server or proxy access logs.
+export function buildSessionHeaders(sessionToken: string): Record<string, string> {
+  const jupyter = getJupyterCredentials();
 
+  return {
+    Accept: 'application/json',
+    Authorization: `Bearer ${sessionToken}`,
+    'X-Jupyter-Base-Url': jupyter.base_url,
+    'X-Jupyter-Token': jupyter.token
+  };
+}
+
+export async function fetchCourses(markusUrl: string): Promise<ICoursesResponse> {
   let sessionToken = await getOrCreateSession(markusUrl);
 
   const makeRequest = async (token: string): Promise<Response> => {
-    return fetch(coursesUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json'
-      },
-      body: JSON.stringify({
-        session_token: token,
-        jupyter: getJupyterCredentials()
-      })
+    return fetch(new URL('jupyter/courses', markusUrl).toString(), {
+      method: 'GET',
+      headers: buildSessionHeaders(token)
     });
   };
 
@@ -195,22 +197,15 @@ export async function fetchCourses(markusUrl: string): Promise<ICoursesResponse>
 }
 
 export async function fetchAssignments(markusUrl: string, courseId: number): Promise<IAssignmentsResponse> {
-  const assignmentsUrl = new URL('jupyter/assignments', markusUrl).toString();
-
   let sessionToken = await getOrCreateSession(markusUrl);
 
   const makeRequest = async (token: string): Promise<Response> => {
-    return fetch(assignmentsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json'
-      },
-      body: JSON.stringify({
-        course_id: courseId,
-        session_token: token,
-        jupyter: getJupyterCredentials()
-      })
+    const assignmentsUrl = new URL('jupyter/assignments', markusUrl);
+    assignmentsUrl.searchParams.set('course_id', String(courseId));
+
+    return fetch(assignmentsUrl.toString(), {
+      method: 'GET',
+      headers: buildSessionHeaders(token)
     });
   };
 

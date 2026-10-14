@@ -107,3 +107,11 @@ _chp_script = next(
     )
 )
 c.ConfigurableHTTPProxy.command = ["node", str(_chp_script)]
+
+# Point each spawned JupyterLab at dev/lab-settings/, whose overrides.json
+# replaces the extension's production defaults (schema/plugin.json) with a
+# local MarkUs server. Only this dev setup reads it; the published extension
+# keeps the schema defaults.
+c.Spawner.args = [
+    f"--LabApp.app_settings_dir={pathlib.Path(__file__).parent / 'dev' / 'lab-settings'}",
+]

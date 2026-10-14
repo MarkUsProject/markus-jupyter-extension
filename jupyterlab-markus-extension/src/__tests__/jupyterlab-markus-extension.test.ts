@@ -204,45 +204,24 @@ describe('buildSubmitPayload', () => {
     assignment: 'A1'
   };
 
-  beforeEach(() => {
-    mockGetBaseUrl.mockReset().mockReturnValue('http://localhost:8888/');
-    mockGetToken.mockReset().mockReturnValue('test-token');
-  });
-
   it('throws when the notebook path is unavailable', () => {
     const panel = makePanel({ path: '' });
 
-    expect(() => buildSubmitPayload(panel, markus, 'session-token')).toThrow('Could not determine notebook path.');
+    expect(() => buildSubmitPayload(panel, markus)).toThrow('Could not determine notebook path.');
   });
 
-  it('throws when no Jupyter token is available', () => {
-    mockGetToken.mockReturnValue('');
-
-    const panel = makePanel({
-      path: 'demo.ipynb',
-      contentsModelName: 'demo.ipynb'
-    });
-
-    expect(() => buildSubmitPayload(panel, markus, 'session-token')).toThrow('No Jupyter token available.');
-  });
-
-  it('assembles the full payload from the panel, MarkUs target, PageConfig, and session token', () => {
+  it('assembles the payload from the panel and MarkUs target', () => {
     const panel = makePanel({
       path: 'nested/demo.ipynb',
       contentsModelName: 'demo.ipynb'
     });
 
-    expect(buildSubmitPayload(panel, markus, 'session-token')).toEqual({
+    expect(buildSubmitPayload(panel, markus)).toEqual({
       notebook_path: 'nested/demo.ipynb',
       course_id: 1,
       course: 'csc108',
       assignment_id: 2,
-      assignment: 'A1',
-      jupyter: {
-        base_url: 'http://localhost:8888/',
-        token: 'test-token'
-      },
-      session_token: 'session-token'
+      assignment: 'A1'
     });
   });
 });
@@ -330,6 +309,24 @@ describe('submitWithSessionRetry', () => {
 
     expect(result.submitted_file).toBe('demo.ipynb');
     expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    const submitRequest = mockFetch.mock.calls[1][1] as RequestInit;
+
+    expect(submitRequest.headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer sess-1',
+      'X-Jupyter-Base-Url': 'http://localhost:8888/',
+      'X-Jupyter-Token': 'test-token',
+      'Content-Type': 'application/json'
+    });
+
+    expect(JSON.parse(submitRequest.body as string)).toEqual({
+      notebook_path: 'demo.ipynb',
+      course_id: 1,
+      course: 'csc108',
+      assignment_id: 2,
+      assignment: 'A1'
+    });
   });
 
   it('re-authenticates and retries exactly once on a 401, succeeding the second time', async () => {
@@ -349,9 +346,9 @@ describe('submitWithSessionRetry', () => {
     expect(result.submitted_file).toBe('demo.ipynb');
     expect(mockFetch).toHaveBeenCalledTimes(4);
 
-    const secondSubmitBody = JSON.parse((mockFetch.mock.calls[3][1] as RequestInit).body as string);
+    const secondSubmitHeaders = (mockFetch.mock.calls[3][1] as RequestInit).headers as Record<string, string>;
 
-    expect(secondSubmitBody.session_token).toBe('sess-2');
+    expect(secondSubmitHeaders.Authorization).toBe('Bearer sess-2');
   });
 
   it('propagates the error if the retried submit also fails with a 401', async () => {
@@ -402,11 +399,20 @@ describe('submitWithSessionRetry', () => {
 describe('selectSubmissionTarget', () => {
   const markusUrl = 'http://localhost:3000/';
 
+  beforeEach(() => {
+    const { showDialog } = require('@jupyterlab/apputils');
+
+    (showDialog as jest.Mock).mockReset();
+    (showDialog as jest.Mock).mockResolvedValue({
+      button: { accept: true }
+    });
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('returns the selected course and assignment', async () => {
+  it('shows the course and assignment dialogs even when there is only one of each', async () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
 
@@ -443,7 +449,12 @@ describe('selectSubmissionTarget', () => {
 
     expect(session.fetchCourses).toHaveBeenCalledWith(markusUrl);
     expect(session.fetchAssignments).toHaveBeenCalledWith(markusUrl, 1);
-    expect(showDialog).not.toHaveBeenCalled();
+    expect(showDialog).toHaveBeenCalledTimes(2);
+
+    const [courseDialog, assignmentDialog] = (showDialog as jest.Mock).mock.calls.map(([args]) => args.body.node);
+
+    expect(courseDialog.querySelector('select').options).toHaveLength(1);
+    expect(assignmentDialog.querySelector('select').options).toHaveLength(1);
   });
 
   it('fetches assignments for the course selected by the user', async () => {
@@ -575,11 +586,35 @@ describe('selectSubmissionTarget', () => {
     );
   });
 
-  it('skips the selection dialog when there is only one course and one assignment', async () => {
+  it('returns null without fetching assignments when the course dialog is cancelled', async () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
 
-    (showDialog as jest.Mock).mockClear();
+    jest.spyOn(session, 'fetchCourses').mockResolvedValue({
+      status: 'success',
+      courses: [
+        {
+          id: 1,
+          name: 'csc108',
+          display_name: 'Introduction to Computer Programming'
+        }
+      ]
+    });
+
+    const fetchAssignmentsSpy = jest.spyOn(session, 'fetchAssignments');
+
+    (showDialog as jest.Mock).mockResolvedValueOnce({
+      button: { accept: false }
+    });
+
+    await expect(selectSubmissionTarget(markusUrl)).resolves.toBeNull();
+
+    expect(fetchAssignmentsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the assignment dialog is cancelled', async () => {
+    const { showDialog } = require('@jupyterlab/apputils');
+    const session = require('../session');
 
     jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
@@ -604,22 +639,20 @@ describe('selectSubmissionTarget', () => {
       ]
     });
 
-    await expect(selectSubmissionTarget(markusUrl)).resolves.toEqual({
-      url: markusUrl,
-      course_id: 1,
-      course: 'csc108',
-      assignment_id: 2,
-      assignment: 'A1'
-    });
+    (showDialog as jest.Mock)
+      .mockResolvedValueOnce({
+        button: { accept: true }
+      })
+      .mockResolvedValueOnce({
+        button: { accept: false }
+      });
 
-    expect(showDialog).not.toHaveBeenCalled();
+    await expect(selectSubmissionTarget(markusUrl)).resolves.toBeNull();
   });
 
-  it('shows the single course as read-only text when there are multiple assignments', async () => {
+  it('shows the selected course as read-only text in the assignment dialog', async () => {
     const { showDialog } = require('@jupyterlab/apputils');
     const session = require('../session');
-
-    (showDialog as jest.Mock).mockClear();
 
     jest.spyOn(session, 'fetchCourses').mockResolvedValue({
       status: 'success',
@@ -650,28 +683,33 @@ describe('selectSubmissionTarget', () => {
       ]
     });
 
-    (showDialog as jest.Mock).mockImplementationOnce(async ({ body }) => {
-      const node = body.node as HTMLElement;
-      const selects = node.querySelectorAll('select');
-
-      expect(selects).toHaveLength(1);
-
-      const assignmentSelect = selects[0] as HTMLSelectElement;
-
-      expect(node.textContent).toContain('csc108 — Introduction to Computer Programming');
-
-      expect(assignmentSelect.options).toHaveLength(2);
-
-      expect(assignmentSelect.options[1].textContent).toContain('A2');
-      expect(assignmentSelect.options[1].textContent).toContain('Assignment 2');
-      expect(assignmentSelect.options[1].textContent).toContain('Due');
-
-      assignmentSelect.value = '3';
-
-      return {
+    // Accept the course dialog, then inspect the assignment dialog.
+    (showDialog as jest.Mock)
+      .mockResolvedValueOnce({
         button: { accept: true }
-      };
-    });
+      })
+      .mockImplementationOnce(async ({ body }) => {
+        const node = body.node as HTMLElement;
+        const selects = node.querySelectorAll('select');
+
+        expect(selects).toHaveLength(1);
+
+        const assignmentSelect = selects[0] as HTMLSelectElement;
+
+        expect(node.textContent).toContain('csc108 — Introduction to Computer Programming');
+
+        expect(assignmentSelect.options).toHaveLength(2);
+
+        expect(assignmentSelect.options[1].textContent).toContain('A2');
+        expect(assignmentSelect.options[1].textContent).toContain('Assignment 2');
+        expect(assignmentSelect.options[1].textContent).toContain('Due');
+
+        assignmentSelect.value = '3';
+
+        return {
+          button: { accept: true }
+        };
+      });
 
     await expect(selectSubmissionTarget(markusUrl)).resolves.toEqual({
       url: markusUrl,
