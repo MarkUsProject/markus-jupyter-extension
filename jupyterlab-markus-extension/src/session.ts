@@ -3,7 +3,10 @@ import { PageConfig } from '@jupyterlab/coreutils';
 // An error thrown by a MarkUs HTTP call, carrying the response status so
 // callers can distinguish retryable failures (401) from everything else.
 export class MarkUsServerError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
     super(message);
     this.name = 'MarkUsServerError';
   }
