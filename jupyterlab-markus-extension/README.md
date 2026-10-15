@@ -4,9 +4,20 @@ This JupyterLab extension adds a **Submit to MarkUs** button to the notebook too
 
 ## Overview
 
-The extension reads MarkUs submission metadata from the notebook, saves the notebook, and sends a request to MarkUs at:
+When the button is clicked, the extension:
+
+1. Saves the notebook.
+2. Reads the MarkUs server URL from the extension's [settings](#markus-server-url) and checks it against the [trusted MarkUs origins](#trusted-markus-origins).
+3. Fetches the user's MarkUs courses and asks them to choose one, then fetches that course's Jupyter-enabled assignments and asks them to choose one.
+4. Shows a confirmation dialog with the notebook, MarkUs URL, username, course, and assignment.
+5. Sends the submission request to MarkUs.
+
+The extension talks to these MarkUs endpoints, all relative to the configured MarkUs URL:
 
 ```text
+POST /jupyter/authenticate
+GET  /jupyter/courses
+GET  /jupyter/assignments?course_id=<id>
 POST /jupyter/submit
 ```
 
@@ -20,7 +31,7 @@ This extension requires:
 - [uv](https://docs.astral.sh/uv/) for managing the Python environment
 - Node.js and [pnpm](https://pnpm.io/) for building the JavaScript/TypeScript source
 - A running MarkUs instance with the Jupyter submission endpoint enabled
-- A notebook containing valid MarkUs metadata
+- A MarkUs user whose user name matches the JupyterHub username, enrolled in a course with at least one assignment that accepts Jupyter/API submissions
 
 ## Install the extension for development
 
@@ -106,9 +117,17 @@ jupyterlab-markus-extension
 
 listed as `enabled ok`.
 
+## MarkUs server URL
+
+The extension setting `markusUrl` is the MarkUs server that notebooks are submitted to (default `"https://markus.teach.cs.toronto.edu/markus"`). If MarkUs runs under a relative URL root, include it in the URL, for example `"http://localhost:3000/csc108"`.
+
+To override it for a single user, open **Settings > Settings Editor > Submit to MarkUs** in JupyterLab and set the MarkUs server URL. To override it deployment-wide, set `markusUrl` in an `overrides.json`, as described for `trustedOrigins` [below](#trusted-markus-origins).
+
+Students don't choose the MarkUs server; they only choose the course and assignment when they submit. The submitted filename in MarkUs is always the current notebook's filename.
+
 ## Trusted MarkUs origins
 
-Submitting a notebook sends the user's Jupyter API token to the MarkUs URL from the notebook's `markus` metadata. The extension setting `trustedOrigins` specifies a list of trusted MarkUs origins (default `["https://markus.teach.cs.toronto.edu"]`)
+Submitting a notebook sends the user's Jupyter API token to the configured [MarkUs server URL](#markus-server-url). The extension setting `trustedOrigins` specifies a list of trusted MarkUs origins (default `["https://markus.teach.cs.toronto.edu"]`)
 
 To override it for a single user, open **Settings > Settings Editor > Submit to MarkUs** in JupyterLab and set the MarkUs origin(s), for example:
 
@@ -130,57 +149,9 @@ To override it deployment-wide (recommended for a real deployment, so every user
 
 See the [JupyterLab documentation on settings overrides](https://jupyterlab.readthedocs.io/en/stable/user/directories.html#overridesjson) for where `overrides.json` should live.
 
-An origin is the scheme, host, and port only (no path). A notebook's `markus.url` must resolve to one of the trusted origins, or the submission is rejected with an error naming the untrusted origin.
+An origin is the scheme, host, and port only (no path). The `markusUrl` setting must resolve to one of the trusted origins, or the submission is rejected with an error naming the untrusted origin.
 
-**Development only**: `http://localhost:3000` is also trusted, as this is the default MarkUs development origin (see [Local development with MarkUs](#local-development-with-markus)).
-
-## Notebook metadata
-
-Each notebook that should be submitted to MarkUs must include top-level notebook metadata named `markus`.
-
-The metadata must include:
-
-- `url`: the base URL of the MarkUs server
-- either `course_id` or `course`
-- either `assignment_id` or `assignment`
-
-The meaning of each field is:
-
-| Field           | Meaning                              |
-| --------------- | ------------------------------------ |
-| `url`           | Base URL of the MarkUs server        |
-| `course_id`     | MarkUs `Course.id`                   |
-| `course`        | MarkUs `Course.name`                 |
-| `assignment_id` | MarkUs `Assignment.id`               |
-| `assignment`    | MarkUs assignment `short_identifier` |
-
-Use either the ID form or the name/identifier form, but not both for the same item.
-
-### Example using IDs
-
-```json
-{
-  "markus": {
-    "url": "http://localhost:3000/",
-    "course_id": 1,
-    "assignment_id": 2
-  }
-}
-```
-
-### Example using course name and assignment short identifier
-
-```json
-{
-  "markus": {
-    "url": "http://localhost:3000/",
-    "course": "csc108",
-    "assignment": "a1"
-  }
-}
-```
-
-The submitted filename in MarkUs is always the current notebook's filename.
+**Development only**: when running JupyterHub via `pnpm start`, `http://localhost:3000` is trusted instead, as this is the default MarkUs development origin (see [Local development with MarkUs](#local-development-with-markus)).
 
 ## MarkUs backend route
 
@@ -244,13 +215,26 @@ jupyter_server:
 
 ## Local development with MarkUs
 
+The extension's built-in defaults in `schema/plugin.json` point at the production MarkUs server. When you run `pnpm start`, `jupyterhub_config.py` instead points each spawned JupyterLab at `dev/lab-settings/` (via `--LabApp.app_settings_dir`). The `overrides.json` there replaces those defaults with a local MarkUs server:
+
+```json
+{
+  "jupyterlab-markus-extension:plugin": {
+    "markusUrl": "http://localhost:3000/csc108",
+    "trustedOrigins": ["http://localhost:3000"]
+  }
+}
+```
+
+Edit that file if your local MarkUs runs elsewhere, then restart JupyterHub. Values set in **Settings > Settings Editor > Submit to MarkUs** still take precedence over these overrides.
+
 A typical local setup is:
 
 1. Start MarkUs.
 2. Start JupyterHub (`pnpm start`) and log in at `http://127.0.0.1:8888/hub/login`.
 3. Open a notebook.
-4. Add the required `markus` metadata.
-5. Click **Submit to MarkUs** in the notebook toolbar.
+4. Click **Submit to MarkUs** in the notebook toolbar.
+5. Choose the course, then the assignment.
 6. Review the confirmation dialog, which shows the notebook, username, MarkUs URL, course, and assignment the notebook is about to be submitted with/to, and click **Submit** to proceed.
 
 Example:
@@ -264,38 +248,6 @@ bin/rails server
 # Terminal 2: JupyterHub
 pnpm start
 ```
-
-The notebook metadata `url` should point to your MarkUs server, for example:
-
-```json
-{
-  "markus": {
-    "url": "http://localhost:3000/",
-    "course": "csc108",
-    "assignment": "a1"
-  }
-}
-```
-
-If your MarkUs instance runs under a relative URL root, include that in the MarkUs URL metadata, for example:
-
-```json
-{
-  "markus": {
-    "url": "http://localhost:3000/csc108/",
-    "course": "csc108",
-    "assignment": "a1"
-  }
-}
-```
-
-The extension uses this value as a base URL and sends the request to:
-
-```text
-jupyter/submit
-```
-
-relative to that base URL.
 
 ## Build commands
 
@@ -375,43 +327,22 @@ Then restart JupyterHub.
 
 If `jupyterlab-markus-extension` shows `enabled ok` but the button still doesn't appear, this is likely intentional: the extension checks for a real JupyterHub identity on activation and hides its button entirely when there isn't one (see [Requirements](#requirements)). Check the browser's devtools console for a warning starting with `[Submit to MarkUs] No JupyterHub identity found`. If you see it, you're not actually running under Hub — make sure you started `pnpm start` and are logged in at `http://127.0.0.1:8888/hub/login`, then open the notebook from _that_ session rather than a separately-started one.
 
-### Missing notebook metadata error
+### "No MarkUs server URL is configured"
 
-Make sure the notebook has top-level metadata named `markus`.
-
-The metadata must include:
-
-```json
-{
-  "markus": {
-    "url": "http://localhost:3000/",
-    "course": "csc108",
-    "assignment": "a1"
-  }
-}
-```
-
-or:
-
-```json
-{
-  "markus": {
-    "url": "http://localhost:3000/",
-    "course_id": 1,
-    "assignment_id": 2
-  }
-}
-```
+The `markusUrl` setting is empty. Set it in **Settings > Settings Editor > Submit to MarkUs**, or deployment-wide in `overrides.json` (see [MarkUs server URL](#markus-server-url)).
 
 ### MarkUs server error
 
-Check that MarkUs has the Jupyter route:
+Check that MarkUs has the Jupyter routes:
 
 ```text
+POST /jupyter/authenticate
+GET  /jupyter/courses
+GET  /jupyter/assignments
 POST /jupyter/submit
 ```
 
-Also confirm that the MarkUs URL in the notebook metadata is correct.
+Also confirm that the `markusUrl` setting is correct, including any relative URL root (e.g. `/csc108`).
 
 ### Jupyter token error
 
@@ -419,7 +350,7 @@ The extension uses `PageConfig.getToken()` to provide a Jupyter token to MarkUs.
 
 ### "MarkUs origin is not trusted" / "No trusted MarkUs origins are configured"
 
-The notebook's `markus.url` doesn't match any origin in the [trusted MarkUs origins](#trusted-markus-origins) setting. This is expected if you're submitting to a MarkUs deployment other than the standard one this extension defaults to (or someone has overridden `trustedOrigins` to an empty list). Add the MarkUs origin (scheme + host + port, no path) to the `trustedOrigins` setting for `jupyterlab-markus-extension:plugin`, then retry.
+The `markusUrl` setting doesn't match any origin in the [trusted MarkUs origins](#trusted-markus-origins) setting. This is expected if you're submitting to a MarkUs deployment other than the standard one this extension defaults to (or someone has overridden `trustedOrigins` to an empty list). Add the MarkUs origin (scheme + host + port, no path) to the `trustedOrigins` setting for `jupyterlab-markus-extension:plugin`, then retry.
 
 ### User not found in MarkUs
 
@@ -434,35 +365,13 @@ jupyter_server:
 
 where `student_user_name` is an existing MarkUs user enrolled as a student in the selected course.
 
-### Course or assignment not found
+### No courses or assignments are available
 
-Check the notebook metadata.
+The course and assignment lists come from MarkUs, for the MarkUs user matching the JupyterHub username:
 
-Use either:
-
-```json
-"course_id": 1
-```
-
-or:
-
-```json
-"course": "csc108"
-```
-
-For assignments, use either:
-
-```json
-"assignment_id": 2
-```
-
-or:
-
-```json
-"assignment": "a1"
-```
-
-Do not use `assessment_id`; the extension uses `assignment_id` or `assignment`.
+- **"No active MarkUs course enrollment was found for your account."** The user isn't enrolled in any active MarkUs course.
+- **"There are no currently available assignments for this MarkUs course."** The chosen course has no assignments currently open for submission.
+- **"A MarkUs assignment is available, but Jupyter/API submission is not enabled for it."** Enable API submissions for the assignment in MarkUs.
 
 ## Project naming
 

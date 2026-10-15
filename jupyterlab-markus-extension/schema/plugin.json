@@ -3,6 +3,12 @@
   "description": "Settings for the Submit to MarkUs extension.",
   "type": "object",
   "properties": {
+    "markusUrl": {
+      "type": "string",
+      "default": "https://markus.teach.cs.toronto.edu/markus",
+      "title": "MarkUs server URL",
+      "description": "The MarkUs server used by the Submit to MarkUs extension."
+    },
     "trustedOrigins": {
       "type": "array",
       "items": {
