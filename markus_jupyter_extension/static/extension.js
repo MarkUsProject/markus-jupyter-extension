@@ -1,7 +1,7 @@
 define(["require", "base/js/namespace", "base/js/dialog"], function (
   requirejs,
   Jupyter,
-  dialog
+  dialog,
 ) {
   const ACTION_PREFIX = "markus";
   const ACTION_NAME = "markus_submit";
@@ -24,7 +24,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     const full_action_name = Jupyter.actions.register(
       action,
       ACTION_NAME,
-      ACTION_PREFIX
+      ACTION_PREFIX,
     );
     const new_group = Jupyter.toolbar.add_buttons_group([full_action_name])[0];
     const logo = document.createElement("img");
@@ -64,7 +64,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
       }, report_error)
       .then(
         (response) => handleMarkUsResponse(response, markusMetadata),
-        (err) => handleNetworkError(submitUrl, err)
+        (err) => handleNetworkError(submitUrl, err),
       );
   }
 
@@ -88,18 +88,18 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
           return response.text();
         } else if (response.status === 404) {
           throw Error(
-            `Could not find MarkUs API key file ${api_key_path} in current directory.`
+            `Could not find MarkUs API key file ${api_key_path} in current directory.`,
           );
         } else {
           throw Error(
-            `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} in current directory.`
+            `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} in current directory.`,
           );
         }
       })
       .catch((e) => {
         console.info(`markus-jupyter-extension: ${e.message}`);
         console.info(
-          `markus-jupyter-extension: Searching for MarkUs API key in home directory.`
+          `markus-jupyter-extension: Searching for MarkUs API key in home directory.`,
         );
         const base_url = Jupyter.notebook.base_url;
         return fetch(`${base_url}files/${api_key_path}`, {
@@ -112,11 +112,11 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
             return response.text();
           } else if (response.status === 404) {
             throw Error(
-              `Could not find MarkUs API key file ${api_key_path} in home directory.`
+              `Could not find MarkUs API key file ${api_key_path} in home directory.`,
             );
           } else {
             throw Error(
-              `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} from home directory.`
+              `Encountered unexpected error (${response.statusText}) when loading MarkUs API key file ${api_key_path} from home directory.`,
             );
           }
         });
@@ -138,7 +138,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
         course_id +
         "/assignments/" +
         assessment_id +
-        "/submit_file"
+        "/submit_file",
     );
   }
 
@@ -152,7 +152,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
   function getAssessmentUrl(markusMetadata) {
     let { url, course_id, assessment_id } = markusMetadata;
     return new URL(
-      url + "/courses/" + course_id + "/assignments/" + assessment_id
+      url + "/courses/" + course_id + "/assignments/" + assessment_id,
     );
   }
 
@@ -206,7 +206,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     formData.append("mime_type", "application/x-ipynb+json");
 
     console.info(
-      `markus-jupyter-extension: Submitting file ${filename} to ${submitUrl}`
+      `markus-jupyter-extension: Submitting file ${filename} to ${submitUrl}`,
     );
 
     return fetch(submitUrl, {
@@ -230,7 +230,7 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
       response.json().then((body) => {
         report_error(
           "Received the following error from the MarkUs server: " +
-            body.description
+            body.description,
         );
       });
       return;
@@ -244,13 +244,13 @@ define(["require", "base/js/namespace", "base/js/dialog"], function (
     assessmentLink.innerText = assessmentUrl;
     const body = document.createElement("p");
     body.appendChild(
-      document.createTextNode("Your file has been submitted! Go to ")
+      document.createTextNode("Your file has been submitted! Go to "),
     );
     body.appendChild(assessmentLink);
     body.appendChild(
       document.createTextNode(
-        " to view your submission. Please check your assessment due date carefully, as only files submitted before the due date will be graded."
-      )
+        " to view your submission. Please check your assessment due date carefully, as only files submitted before the due date will be graded.",
+      ),
     );
 
     // Success dialog
