@@ -289,6 +289,16 @@ To run a subset by name:
 pnpm exec jest -t "normalizeBaseUrl"
 ```
 
+## Formatting
+
+Code is formatted with [Prettier](https://prettier.io/), pinned to an exact version in `package.json`. The repository's [pre-commit](https://pre-commit.com/) hook runs that same installed version, so run `pnpm install` here before committing. To format all files, run from the repository root:
+
+```bash
+pre-commit run --all-files
+```
+
+Editors with a Prettier integration (e.g. the VS Code Prettier extension) pick up the version in `node_modules` for files in this directory.
+
 ## Uninstall
 
 To remove the extension from a JupyterLab environment, delete the labextension symlink (or copy) that `jupyter-builder develop` created under the virtual environment's `share` directory:
