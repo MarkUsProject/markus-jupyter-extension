@@ -27,7 +27,7 @@ MarkUs then uses the Jupyter token and notebook path to fetch the file from Jupy
 
 This extension requires:
 
-- Python 3.12+
+- Python 3.10+
 - [uv](https://docs.astral.sh/uv/) for managing the Python environment
 - Node.js and [pnpm](https://pnpm.io/) for building the JavaScript/TypeScript source
 - A running MarkUs instance with the Jupyter submission endpoint enabled

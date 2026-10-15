@@ -6,7 +6,7 @@ readme = "README.md"
 maintainers = [
     { name = "David Liu", email="david@cs.toronto.edu" }
 ]
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.10,<3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
